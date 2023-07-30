@@ -44,7 +44,8 @@ import {
     transformToCredentialEntity,
     decryptCredentialData,
     clearSessionMemory,
-    replaceInputsWithConfig
+    replaceInputsWithConfig,
+    getEncryptionKey
 } from './utils'
 import { cloneDeep, omit } from 'lodash'
 import { getDataSource } from './DataSource'
@@ -82,6 +83,9 @@ export class App {
 
                 // Initialize API keys
                 await getAPIKeys()
+
+                // Initialize encryption key
+                await getEncryptionKey()
             })
             .catch((err) => {
                 logger.error('❌ [server]: Error during Data Source initialization:', err)
@@ -401,7 +405,7 @@ export class App {
             const nodes = parsedFlowData.nodes
             let chatId = await getChatId(chatflow.id)
             if (!chatId) chatId = chatflow.id
-            clearSessionMemory(nodes, this.nodesPool.componentNodes, chatId, req.query.sessionId as string)
+            clearSessionMemory(nodes, this.nodesPool.componentNodes, chatId, this.AppDataSource, req.query.sessionId as string)
             const results = await this.AppDataSource.getRepository(ChatMessage).delete({ chatflowid: req.params.id })
             return res.json(results)
         })
