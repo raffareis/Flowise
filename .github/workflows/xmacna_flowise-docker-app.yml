@@ -30,7 +30,7 @@ jobs:
               uses: docker/build-push-action@v3
               with:
                   push: true
-                  tags: xmacna.azurecr.io/${{ secrets.AzureAppService_ContainerUsername_dc4c44b92ef6494fa7e3a254fefeae98 }}/flowise-xmacna-2:${{ github.sha }}
+                  tags: xmacna.azurecr.io/flowise-xmacna-2:${{ github.sha }}
                   file: ./Dockerfile
 
     deploy:
@@ -48,7 +48,7 @@ jobs:
                   app-name: 'flowise-docker-app'
                   slot-name: 'production'
                   publish-profile: ${{ secrets.AzureAppService_PublishProfile_0346da7745094323a465510af5e2a181 }}
-                  images: 'xmacna.azurecr.io/${{ secrets.AzureAppService_ContainerUsername_dc4c44b92ef6494fa7e3a254fefeae98 }}/flowise-xmacna-2:${{ github.sha }}'
+                  images: 'xmacna.azurecr.io/flowise-xmacna-2:${{ github.sha }}'
             
             - name: Azure CLI login
               uses: azure/login@v1
