@@ -48,13 +48,5 @@ jobs:
                   app-name: 'flowise-docker-app'
                   slot-name: 'production'
                   publish-profile: ${{ secrets.AzureAppService_PublishProfile_0346da7745094323a465510af5e2a181 }}
-                  images: 'xmacna.azurecr.io/flowise-xmacna-2:${{ github.sha }}'
-            
-            - name: Azure CLI login
-              uses: azure/login@v1
-              with:
-                creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-            - name: Remove image from ACR
-              run: |
-                az acr repository delete --name xmacna --image flowise-xmacna-2:${{ github.sha }} --yes
+                  images: 'xmacna.azurecr.io/flowise-xmacna-2:${{ github.sha }}'           
+           
