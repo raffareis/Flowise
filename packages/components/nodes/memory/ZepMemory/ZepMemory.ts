@@ -2,8 +2,9 @@ import { IMessage, INode, INodeData, INodeParams, MemoryMethods, MessageType } f
 import { convertBaseMessagetoIMessage, getBaseClasses, getCredentialData, getCredentialParam } from '../../../src/utils'
 import { ZepMemory, ZepMemoryInput } from 'langchain/memory/zep'
 import { ICommonObject } from '../../../src'
-import { InputValues, MemoryVariables, OutputValues } from 'langchain/memory'
-import { BaseMessage } from 'langchain/schema'
+import { InputValues, MemoryVariables, OutputValues, getBufferString } from 'langchain/memory'
+import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from 'langchain/schema'
+import { Memory, NotFoundError } from '@getzep/zep-js'
 
 class ZepMemory_Memory implements INode {
     label: string
@@ -20,7 +21,7 @@ class ZepMemory_Memory implements INode {
     constructor() {
         this.label = 'Zep Memory'
         this.name = 'ZepMemory'
-        this.version = 2.0
+        this.version = 2.01
         this.type = 'ZepMemory'
         this.icon = 'zep.svg'
         this.category = 'Memory'
@@ -145,13 +146,57 @@ class ZepMemoryExtended extends ZepMemory implements MemoryMethods {
         if (overrideSessionId) {
             this.sessionId = overrideSessionId
         }
-        return super.loadMemoryVariables({ ...values, lastN: this.lastN })
+        // Wait for ZepClient to be initialized
+        const zepClient = await this.zepClientPromise
+        if (!zepClient) {
+            throw new Error('ZepClient not initialized')
+        }
+
+        const lastN = values.lastN ?? undefined
+
+        let memory: Memory | null = null
+        try {
+            memory = await zepClient.memory.getMemory(this.sessionId, lastN)
+        } catch (error) {
+            if (error instanceof NotFoundError) {
+                const result = this.returnMessages ? { [this.memoryKey]: [] } : { [this.memoryKey]: '' }
+                return result
+            } else {
+                throw error
+            }
+        }
+
+        let messages: BaseMessage[] = memory && memory.summary?.content ? [new SystemMessage(memory.summary.content)] : []
+
+        if (memory) {
+            messages = messages.concat(
+                memory.messages.map((message) => {
+                    const { content, role } = message
+
+                    if (role === this.aiPrefix) {
+                        return new AIMessage(content)
+                    } else {
+                        return new HumanMessage({ content, name: role })
+                    }
+                })
+            )
+        }
+
+        if (this.returnMessages) {
+            return {
+                [this.memoryKey]: messages
+            }
+        }
+        return {
+            [this.memoryKey]: getBufferString(messages, this.humanPrefix, this.aiPrefix)
+        }
     }
 
     async saveContext(inputValues: InputValues, outputValues: OutputValues, overrideSessionId = ''): Promise<void> {
         if (overrideSessionId) {
             this.sessionId = overrideSessionId
         }
+
         return super.saveContext(inputValues, outputValues)
     }
 
