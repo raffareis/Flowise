@@ -310,7 +310,9 @@ export const buildLangchain = async (
             const newNodeInstance = new nodeModule.nodeClass()
 
             let flowNodeData = cloneDeep(reactFlowNode.data)
+
             if (overrideConfig) flowNodeData = replaceInputsWithConfig(flowNodeData, overrideConfig)
+
             const reactFlowNodeData: INodeData = resolveVariables(flowNodeData, flowNodes, question, chatHistory)
 
             // TODO: Avoid processing Text Splitter + Doc Loader once Upsert & Load Existing Vector Nodes are deprecated
@@ -640,6 +642,20 @@ export const replaceInputsWithConfig = (flowNodeData: INodeData, overrideConfig:
     const inputsObj = flowNodeData[types] ?? {}
 
     getParamValues(inputsObj)
+
+    if (overrideConfig.vars) {
+        const inputKeys = Object.keys(inputsObj)
+        const replaceKeys = Object.keys(overrideConfig.vars)
+        for (let i = 0; i < inputKeys.length; i++) {
+            const inputKey = inputKeys[i]
+            if (typeof inputsObj[inputKey] === 'string') {
+                for (let j = 0; j < replaceKeys.length; j++) {
+                    const replaceKey = replaceKeys[j]
+                    inputsObj[inputKey] = inputsObj[inputKey].replace(`{{${replaceKey}}}`, overrideConfig.vars[replaceKey])
+                }
+            }
+        }
+    }
 
     return flowNodeData
 }
