@@ -1,4 +1,7 @@
-import { IMessage, INode, INodeData, INodeParams, MemoryMethods, MessageType } from '../../../src/Interface'
+import { ZepMemory, ZepMemoryInput } from '@langchain/community/memory/zep'
+import { BaseMessage } from '@langchain/core/messages'
+import { InputValues, MemoryVariables, OutputValues } from 'langchain/memory'
+import { IMessage, INode, INodeData, INodeParams, MemoryMethods, MessageType, ICommonObject } from '../../../src/Interface'
 import { convertBaseMessagetoIMessage, getBaseClasses, getCredentialData, getCredentialParam } from '../../../src/utils'
 import { ZepMemory, ZepMemoryInput } from 'langchain/memory/zep'
 import { ICommonObject } from '../../../src'
