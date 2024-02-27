@@ -19,7 +19,7 @@ class ZepMemory_Memory implements INode {
     inputs: INodeParams[]
 
     constructor() {
-        this.label = 'Zep Memory'
+        this.label = 'Zep Memory - Open Source'
         this.name = 'ZepMemory'
         this.version = 2.01
         this.type = 'ZepMemory'
@@ -99,11 +99,11 @@ class ZepMemory_Memory implements INode {
     }
 
     async init(nodeData: INodeData, _: string, options: ICommonObject): Promise<any> {
-        return await initalizeZep(nodeData, options)
+        return await initializeZep(nodeData, options)
     }
 }
 
-const initalizeZep = async (nodeData: INodeData, options: ICommonObject): Promise<ZepMemory> => {
+const initializeZep = async (nodeData: INodeData, options: ICommonObject): Promise<ZepMemory> => {
     const baseURL = nodeData.inputs?.baseURL as string
     const aiPrefix = nodeData.inputs?.aiPrefix as string
     const humanPrefix = nodeData.inputs?.humanPrefix as string
