@@ -4,15 +4,16 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages'
 import { ChainValues } from '@langchain/core/utils/types'
 import { AgentStep } from '@langchain/core/agents'
-import { renderTemplate, MessagesPlaceholder } from '@langchain/core/prompts'
+import { renderTemplate, MessagesPlaceholder, HumanMessagePromptTemplate, PromptTemplate } from '@langchain/core/prompts'
 import { RunnableSequence } from '@langchain/core/runnables'
 import { ChatConversationalAgent } from 'langchain/agents'
 import { getBaseClasses } from '../../../src/utils'
 import { ConsoleCallbackHandler, CustomChainHandler, additionalCallbacks } from '../../../src/handler'
-import { FlowiseMemory, ICommonObject, IMessage, INode, INodeData, INodeParams } from '../../../src/Interface'
+import { IVisionChatModal, FlowiseMemory, ICommonObject, INode, INodeData, INodeParams, IUsedTool } from '../../../src/Interface'
 import { AgentExecutor } from '../../../src/agents'
-import { ChatOpenAI } from '../../chatmodels/ChatOpenAI/FlowiseChatOpenAI'
-import { addImagesToMessages } from '../../../src/multiModalUtils'
+import { addImagesToMessages, llmSupportsVision } from '../../../src/multiModalUtils'
+import { checkInputs, Moderation } from '../../moderation/Moderation'
+import { formatResponse } from '../../outputparsers/OutputParserHelpers'
 
 const DEFAULT_PREFIX = `Assistant is a large language model trained by OpenAI.
 
@@ -46,7 +47,7 @@ class ConversationalAgent_Agents implements INode {
     constructor(fields?: { sessionId?: string }) {
         this.label = 'Conversational Agent'
         this.name = 'conversationalAgent'
-        this.version = 2.0
+        this.version = 3.0
         this.type = 'AgentExecutor'
         this.category = 'Agents'
         this.icon = 'agent.svg'
@@ -77,35 +78,72 @@ class ConversationalAgent_Agents implements INode {
                 default: DEFAULT_PREFIX,
                 optional: true,
                 additionalParams: true
+            },
+            {
+                label: 'Input Moderation',
+                description: 'Detect text that could generate harmful output and prevent it from being sent to the language model',
+                name: 'inputModeration',
+                type: 'Moderation',
+                optional: true,
+                list: true
+            },
+            {
+                label: 'Max Iterations',
+                name: 'maxIterations',
+                type: 'number',
+                optional: true,
+                additionalParams: true
             }
         ]
         this.sessionId = fields?.sessionId
     }
 
     async init(nodeData: INodeData, input: string, options: ICommonObject): Promise<any> {
-        return prepareAgent(nodeData, options, { sessionId: this.sessionId, chatId: options.chatId, input }, options.chatHistory)
+        return prepareAgent(nodeData, options, { sessionId: this.sessionId, chatId: options.chatId, input })
     }
 
-    async run(nodeData: INodeData, input: string, options: ICommonObject): Promise<string> {
+    async run(nodeData: INodeData, input: string, options: ICommonObject): Promise<string | object> {
         const memory = nodeData.inputs?.memory as FlowiseMemory
+        const moderations = nodeData.inputs?.inputModeration as Moderation[]
 
-        const executor = await prepareAgent(
-            nodeData,
-            options,
-            { sessionId: this.sessionId, chatId: options.chatId, input },
-            options.chatHistory
-        )
+        if (moderations && moderations.length > 0) {
+            try {
+                // Use the output of the moderation chain as input for the BabyAGI agent
+                input = await checkInputs(moderations, input)
+            } catch (e) {
+                await new Promise((resolve) => setTimeout(resolve, 500))
+                //streamResponse(options.socketIO && options.socketIOClientId, e.message, options.socketIO, options.socketIOClientId)
+                return formatResponse(e.message)
+            }
+        }
+        const executor = await prepareAgent(nodeData, options, { sessionId: this.sessionId, chatId: options.chatId, input })
 
         const loggerHandler = new ConsoleCallbackHandler(options.logger)
         const callbacks = await additionalCallbacks(nodeData, options)
 
         let res: ChainValues = {}
+        let sourceDocuments: ICommonObject[] = []
+        let usedTools: IUsedTool[] = []
 
         if (options.socketIO && options.socketIOClientId) {
             const handler = new CustomChainHandler(options.socketIO, options.socketIOClientId)
             res = await executor.invoke({ input }, { callbacks: [loggerHandler, handler, ...callbacks] })
+            if (res.sourceDocuments) {
+                options.socketIO.to(options.socketIOClientId).emit('sourceDocuments', flatten(res.sourceDocuments))
+                sourceDocuments = res.sourceDocuments
+            }
+            if (res.usedTools) {
+                options.socketIO.to(options.socketIOClientId).emit('usedTools', res.usedTools)
+                usedTools = res.usedTools
+            }
         } else {
             res = await executor.invoke({ input }, { callbacks: [loggerHandler, ...callbacks] })
+            if (res.sourceDocuments) {
+                sourceDocuments = res.sourceDocuments
+            }
+            if (res.usedTools) {
+                usedTools = res.usedTools
+            }
         }
 
         await memory.addChatMessages(
@@ -122,17 +160,30 @@ class ConversationalAgent_Agents implements INode {
             this.sessionId
         )
 
-        return res?.output
+        let finalRes = res?.output
+
+        if (sourceDocuments.length || usedTools.length) {
+            finalRes = { text: res?.output }
+            if (sourceDocuments.length) {
+                finalRes.sourceDocuments = flatten(sourceDocuments)
+            }
+            if (usedTools.length) {
+                finalRes.usedTools = usedTools
+            }
+            return finalRes
+        }
+
+        return finalRes
     }
 }
 
 const prepareAgent = async (
     nodeData: INodeData,
     options: ICommonObject,
-    flowObj: { sessionId?: string; chatId?: string; input?: string },
-    chatHistory: IMessage[] = []
+    flowObj: { sessionId?: string; chatId?: string; input?: string }
 ) => {
     const model = nodeData.inputs?.model as BaseChatModel
+    const maxIterations = nodeData.inputs?.maxIterations as string
     let tools = nodeData.inputs?.tools as Tool[]
     tools = flatten(tools)
     const memory = nodeData.inputs?.memory as FlowiseMemory
@@ -150,33 +201,32 @@ const prepareAgent = async (
         outputParser
     })
 
-    if (model instanceof ChatOpenAI) {
-        let humanImageMessages: HumanMessage[] = []
+    if (llmSupportsVision(model)) {
+        const visionChatModel = model as IVisionChatModal
         const messageContent = addImagesToMessages(nodeData, options, model.multiModalOption)
 
         if (messageContent?.length) {
-            // Change model to gpt-4-vision
-            model.modelName = 'gpt-4-vision-preview'
-
-            // Change default max token to higher when using gpt-4-vision
-            model.maxTokens = 1024
-
-            for (const msg of messageContent) {
-                humanImageMessages.push(new HumanMessage({ content: [msg] }))
-            }
+            visionChatModel.setVisionModel()
 
             // Pop the `agent_scratchpad` MessagePlaceHolder
             let messagePlaceholder = prompt.promptMessages.pop() as MessagesPlaceholder
-
-            // Add the HumanMessage for images
-            prompt.promptMessages.push(...humanImageMessages)
+            if (prompt.promptMessages.at(-1) instanceof HumanMessagePromptTemplate) {
+                const lastMessage = prompt.promptMessages.pop() as HumanMessagePromptTemplate
+                const template = (lastMessage.prompt as PromptTemplate).template as string
+                const msg = HumanMessagePromptTemplate.fromTemplate([
+                    ...messageContent,
+                    {
+                        text: template
+                    }
+                ])
+                msg.inputVariables = lastMessage.inputVariables
+                prompt.promptMessages.push(msg)
+            }
 
             // Add the `agent_scratchpad` MessagePlaceHolder back
             prompt.promptMessages.push(messagePlaceholder)
         } else {
-            // revert to previous values if image upload is empty
-            model.modelName = model.configuredModel
-            model.maxTokens = model.configuredMaxToken
+            visionChatModel.revertToOriginalModel()
         }
     }
 
@@ -190,7 +240,7 @@ const prepareAgent = async (
             [inputKey]: (i: { input: string; steps: AgentStep[] }) => i.input,
             agent_scratchpad: async (i: { input: string; steps: AgentStep[] }) => await constructScratchPad(i.steps),
             [memoryKey]: async (_: { input: string; steps: AgentStep[] }) => {
-                const messages = (await memory.getChatMessages(flowObj?.sessionId, true, chatHistory)) as BaseMessage[]
+                const messages = (await memory.getChatMessages(flowObj?.sessionId, true)) as BaseMessage[]
                 return messages ?? []
             }
         },
@@ -205,7 +255,8 @@ const prepareAgent = async (
         sessionId: flowObj?.sessionId,
         chatId: flowObj?.chatId,
         input: flowObj?.input,
-        verbose: process.env.DEBUG === 'true'
+        verbose: process.env.DEBUG === 'true',
+        maxIterations: maxIterations ? parseFloat(maxIterations) : undefined
     })
 
     return executor

@@ -16,7 +16,7 @@
                 "id": "csvAgent_0",
                 "label": "CSV Agent",
                 "name": "csvAgent",
-                "version": 1,
+                "version": 3,
                 "type": "AgentExecutor",
                 "baseClasses": ["AgentExecutor", "BaseChain"],
                 "category": "Agents",
@@ -36,9 +36,29 @@
                         "name": "model",
                         "type": "BaseLanguageModel",
                         "id": "csvAgent_0-input-model-BaseLanguageModel"
+                    },
+                    {
+                        "label": "Input Moderation",
+                        "description": "Detect text that could generate harmful output and prevent it from being sent to the language model",
+                        "name": "inputModeration",
+                        "type": "Moderation",
+                        "optional": true,
+                        "list": true,
+                        "id": "csvAgent_0-input-inputModeration-Moderation"
+                    },
+                    {
+                        "label": "Custom Pandas Read_CSV Code",
+                        "description": "Custom Pandas <a target=\"_blank\" href=\"https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.read_csv.html\">read_csv</a> function. Takes in an input: \"csv_data\"",
+                        "name": "customReadCSV",
+                        "default": "read_csv(csv_data)",
+                        "type": "code",
+                        "optional": true,
+                        "additionalParams": true,
+                        "id": "csvAgent_0-input-customReadCSV-code"
                     }
                 ],
                 "inputs": {
+                    "inputModeration": "",
                     "model": "{{chatOpenAI_0.data.instance}}"
                 },
                 "outputAnchors": [

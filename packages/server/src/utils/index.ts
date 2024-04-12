@@ -162,45 +162,32 @@ export const constructGraphs = (
  * @param {string} endNodeId
  */
 export const getStartingNodes = (graph: INodeDirectedGraph, endNodeId: string) => {
-    const visited = new Set<string>()
-    const queue: Array<[string, number]> = [[endNodeId, 0]]
     const depthQueue: IDepthQueue = {
         [endNodeId]: 0
     }
 
-    let maxDepth = 0
-    let startingNodeIds: string[] = []
-
-    while (queue.length > 0) {
-        const [currentNode, depth] = queue.shift()!
-
-        if (visited.has(currentNode)) {
-            continue
-        }
-
-        visited.add(currentNode)
-
-        if (depth > maxDepth) {
-            maxDepth = depth
-            startingNodeIds = [currentNode]
-        } else if (depth === maxDepth) {
-            startingNodeIds.push(currentNode)
-        }
-
-        for (const neighbor of graph[currentNode]) {
-            if (!visited.has(neighbor)) {
-                queue.push([neighbor, depth + 1])
-                depthQueue[neighbor] = depth + 1
-            }
-        }
+    // Assuming that this is a directed acyclic graph, there will be no infinite loop problem.
+    const walkGraph = (nodeId: string) => {
+        const depth = depthQueue[nodeId]
+        graph[nodeId].flatMap((id) => {
+            depthQueue[id] = Math.max(depthQueue[id] ?? 0, depth + 1)
+            walkGraph(id)
+        })
     }
 
+    walkGraph(endNodeId)
+
+    const maxDepth = Math.max(...Object.values(depthQueue))
     const depthQueueReversed: IDepthQueue = {}
     for (const nodeId in depthQueue) {
         if (Object.prototype.hasOwnProperty.call(depthQueue, nodeId)) {
             depthQueueReversed[nodeId] = Math.abs(depthQueue[nodeId] - maxDepth)
         }
     }
+
+    const startingNodeIds = Object.entries(depthQueueReversed)
+        .filter(([_, depth]) => depth === 0)
+        .map(([id, _]) => id)
 
     return { startingNodeIds, depthQueue: depthQueueReversed }
 }
@@ -251,6 +238,93 @@ export const getEndingNodes = (nodeDependencies: INodeDependencies, graph: INode
 }
 
 /**
+ * Get file name from base64 string
+ * @param {string} fileBase64
+ */
+export const getFileName = (fileBase64: string): string => {
+    let fileNames = []
+    if (fileBase64.startsWith('FILE-STORAGE::')) {
+        const names = fileBase64.substring(14)
+        if (names.includes('[') && names.includes(']')) {
+            const files = JSON.parse(names)
+            return files.join(', ')
+        } else {
+            return fileBase64.substring(14)
+        }
+    }
+    if (fileBase64.startsWith('[') && fileBase64.endsWith(']')) {
+        const files = JSON.parse(fileBase64)
+        for (const file of files) {
+            const splitDataURI = file.split(',')
+            const filename = splitDataURI[splitDataURI.length - 1].split(':')[1]
+            fileNames.push(filename)
+        }
+        return fileNames.join(', ')
+    } else {
+        const splitDataURI = fileBase64.split(',')
+        const filename = splitDataURI[splitDataURI.length - 1].split(':')[1]
+        return filename
+    }
+}
+
+/**
+ * Save upsert flowData
+ * @param {INodeData} nodeData
+ * @param {Record<string, any>} upsertHistory
+ */
+export const saveUpsertFlowData = (nodeData: INodeData, upsertHistory: Record<string, any>): ICommonObject[] => {
+    const existingUpsertFlowData = upsertHistory['flowData'] ?? []
+    const paramValues: ICommonObject[] = []
+
+    for (const input in nodeData.inputs) {
+        const inputParam = nodeData.inputParams.find((inp) => inp.name === input)
+        if (!inputParam) continue
+
+        let paramValue: ICommonObject = {}
+
+        if (!nodeData.inputs[input]) {
+            continue
+        }
+        if (
+            typeof nodeData.inputs[input] === 'string' &&
+            nodeData.inputs[input].startsWith('{{') &&
+            nodeData.inputs[input].endsWith('}}')
+        ) {
+            continue
+        }
+        // Get file name instead of the base64 string
+        if (nodeData.category === 'Document Loaders' && nodeData.inputParams.find((inp) => inp.name === input)?.type === 'file') {
+            paramValue = {
+                label: inputParam?.label,
+                name: inputParam?.name,
+                type: inputParam?.type,
+                value: getFileName(nodeData.inputs[input])
+            }
+            paramValues.push(paramValue)
+            continue
+        }
+
+        paramValue = {
+            label: inputParam?.label,
+            name: inputParam?.name,
+            type: inputParam?.type,
+            value: nodeData.inputs[input]
+        }
+        paramValues.push(paramValue)
+    }
+
+    const newFlowData = {
+        label: nodeData.label,
+        name: nodeData.name,
+        category: nodeData.category,
+        id: nodeData.id,
+        paramValues
+    }
+    existingUpsertFlowData.push(newFlowData)
+    return existingUpsertFlowData
+}
+
+/**
  * Build langchain from start to end
  * @param {string[]} startingNodeIds
  * @param {IReactFlowNode[]} reactFlowNodes
@@ -285,6 +359,8 @@ export const buildFlow = async (
 ) => {
     const flowNodes = cloneDeep(reactFlowNodes)
 
+    let upsertHistory: Record<string, any> = {}
+
     // Create a Queue and add our initial node in it
     const nodeQueue = [] as INodeQueue[]
     const exploredNode = {} as IExploredNode
@@ -299,6 +375,8 @@ export const buildFlow = async (
         exploredNode[startingNodeIds[i]] = { remainingLoop: maxLoop, lastSeenDepth: 0 }
     }
 
+    const initializedNodes: Set<string> = new Set()
+    const reversedGraph = constructGraphs(reactFlowNodes, reactFlowEdges, { isReversed: true }).graph
     while (nodeQueue.length) {
         const { nodeId, depth } = nodeQueue.shift() as INodeQueue
 
@@ -315,12 +393,14 @@ export const buildFlow = async (
 
             if (overrideConfig) flowNodeData = replaceInputsWithConfig(flowNodeData, overrideConfig)
 
+            if (isUpsert) upsertHistory['flowData'] = saveUpsertFlowData(flowNodeData, upsertHistory)
+
             const reactFlowNodeData: INodeData = resolveVariables(flowNodeData, flowNodes, question, chatHistory)
 
             // TODO: Avoid processing Text Splitter + Doc Loader once Upsert & Load Existing Vector Nodes are deprecated
             if (isUpsert && stopNodeId && nodeId === stopNodeId) {
                 logger.debug(`[server]: Upserting ${reactFlowNode.data.label} (${reactFlowNode.data.id})`)
-                await newNodeInstance.vectorStoreMethods!['upsert']!.call(newNodeInstance, reactFlowNodeData, {
+                const indexResult = await newNodeInstance.vectorStoreMethods!['upsert']!.call(newNodeInstance, reactFlowNodeData, {
                     chatId,
                     sessionId,
                     chatflowid,
@@ -332,6 +412,7 @@ export const buildFlow = async (
                     dynamicVariables,
                     uploads
                 })
+                if (indexResult) upsertHistory['result'] = indexResult
                 logger.debug(`[server]: Finished upserting ${reactFlowNode.data.label} (${reactFlowNode.data.id})`)
                 break
             } else {
@@ -386,6 +467,7 @@ export const buildFlow = async (
                 flowNodes[nodeIndex].data.instance = outputResult
 
                 logger.debug(`[server]: Finished initializing ${reactFlowNode.data.label} (${reactFlowNode.data.id})`)
+                initializedNodes.add(reactFlowNode.data.id)
             }
         } catch (e: any) {
             logger.error(e)
@@ -408,6 +490,8 @@ export const buildFlow = async (
         for (let i = 0; i < neighbourNodeIds.length; i += 1) {
             const neighNodeId = neighbourNodeIds[i]
             if (ignoreNodeIds.includes(neighNodeId)) continue
+            if (initializedNodes.has(neighNodeId)) continue
+            if (reversedGraph[neighNodeId].some((dependId) => !initializedNodes.has(dependId))) continue
             // If nodeId has been seen, cycle detected
             if (Object.prototype.hasOwnProperty.call(exploredNode, neighNodeId)) {
                 const { remainingLoop, lastSeenDepth } = exploredNode[neighNodeId]
@@ -432,7 +516,7 @@ export const buildFlow = async (
             flowNodes.push(flowNodes.splice(index, 1)[0])
         }
     }
-    return flowNodes
+    return isUpsert ? (upsertHistory as any) : flowNodes
 }
 
 /**
@@ -495,13 +579,14 @@ export const clearSessionMemory = async (
  * @returns {string}
  */
 export const getVariableValue = (
-    paramValue: string,
+    paramValue: string | object,
     reactFlowNodes: IReactFlowNode[],
     question: string,
     chatHistory: IMessage[],
     isAcceptVariable = false
 ) => {
-    let returnVal = paramValue
+    const isObject = typeof paramValue === 'object'
+    let returnVal = (isObject ? JSON.stringify(paramValue) : paramValue) ?? ''
     const variableStack = []
     const variableDict = {} as IVariableDict
     let startIdx = 0
@@ -534,11 +619,45 @@ export const getVariableValue = (
                 variableDict[`{{${variableFullPath}}}`] = handleEscapeCharacters(convertChatHistoryToText(chatHistory), false)
             }
 
-            // Split by first occurrence of '.' to get just nodeId
-            const [variableNodeId, _] = variableFullPath.split('.')
+            // Resolve values with following case.
+            // 1: <variableNodeId>.data.instance
+            // 2: <variableNodeId>.data.instance.pathtokey
+            const variableFullPathParts = variableFullPath.split('.')
+            const variableNodeId = variableFullPathParts[0]
             const executedNode = reactFlowNodes.find((nd) => nd.id === variableNodeId)
             if (executedNode) {
-                const variableValue = get(executedNode.data, 'instance')
+                let variableValue = get(executedNode.data, 'instance')
+
+                // Handle path such as `<variableNodeId>.data.instance.key`
+                if (variableFullPathParts.length > 3) {
+                    let variableObj = null
+                    switch (typeof variableValue) {
+                        case 'string': {
+                            const unEscapedVariableValue = handleEscapeCharacters(variableValue, true)
+                            if (unEscapedVariableValue.startsWith('{') && unEscapedVariableValue.endsWith('}')) {
+                                try {
+                                    variableObj = JSON.parse(unEscapedVariableValue)
+                                } catch (e) {
+                                    // ignore
+                                }
+                            }
+                            break
+                        }
+                        case 'object': {
+                            variableObj = variableValue
+                            break
+                        }
+                        default:
+                            break
+                    }
+                    if (variableObj) {
+                        variableObj = get(variableObj, variableFullPathParts.slice(3))
+                        variableValue = handleEscapeCharacters(
+                            typeof variableObj === 'object' ? JSON.stringify(variableObj) : variableObj,
+                            false
+                        )
+                    }
+                }
                 if (isAcceptVariable) {
                     variableDict[`{{${variableFullPath}}}`] = variableValue
                 } else {
@@ -564,7 +683,7 @@ export const getVariableValue = (
         })
         return returnVal
     }
-    return returnVal
+    return isObject ? JSON.parse(returnVal) : returnVal
 }
 
 /**
@@ -871,7 +990,8 @@ export const isFlowValidForStream = (reactFlowNodes: IReactFlowNode[], endingNod
             'chatAnthropic_LlamaIndex',
             'chatOllama',
             'awsChatBedrock',
-            'chatMistralAI'
+            'chatMistralAI',
+            'groqChat'
         ],
         LLMs: ['azureOpenAI', 'openAI', 'ollama']
     }
@@ -893,7 +1013,14 @@ export const isFlowValidForStream = (reactFlowNodes: IReactFlowNode[], endingNod
         isValidChainOrAgent = !blacklistChains.includes(endingNodeData.name)
     } else if (endingNodeData.category === 'Agents') {
         // Agent that are available to stream
-        const whitelistAgents = ['openAIFunctionAgent', 'csvAgent', 'airtableAgent', 'conversationalRetrievalAgent']
+        const whitelistAgents = [
+            'openAIFunctionAgent',
+            'mistralAIToolAgent',
+            'csvAgent',
+            'airtableAgent',
+            'conversationalRetrievalAgent',
+            'openAIToolAgent'
+        ]
         isValidChainOrAgent = whitelistAgents.includes(endingNodeData.name)
     } else if (endingNodeData.category === 'Engine') {
         const whitelistEngine = ['contextChatEngine', 'simpleChatEngine', 'queryEngine', 'subQuestionQueryEngine']
@@ -1032,16 +1159,18 @@ export const redactCredentialWithPasswordType = (
  * API/Embed + UI:
  * (3) Hard-coded sessionId in UI
  * (4) Not specified on UI nor API, default to chatId
- * @param {any} instance
+ * @param {IReactFlowNode | undefined} memoryNode
  * @param {IncomingInput} incomingInput
  * @param {string} chatId
+ * @param {boolean} isInternal
+ * @returns {string}
  */
 export const getMemorySessionId = (
-    memoryNode: IReactFlowNode,
+    memoryNode: IReactFlowNode | undefined,
     incomingInput: IncomingInput,
     chatId: string,
     isInternal: boolean
-): string | undefined => {
+): string => {
     if (!isInternal) {
         // Provided in API body - incomingInput.overrideConfig: { sessionId: 'abc' }
         if (incomingInput.overrideConfig?.sessionId) {
@@ -1054,7 +1183,7 @@ export const getMemorySessionId = (
     }
 
     // Hard-coded sessionId in UI
-    if (memoryNode.data.inputs?.sessionId) {
+    if (memoryNode && memoryNode.data.inputs?.sessionId) {
         return memoryNode.data.inputs.sessionId
     }
 
@@ -1063,18 +1192,21 @@ export const getMemorySessionId = (
 }
 
 /**
- * Replace chatHistory if incomingInput.history is empty and sessionId/chatId is provided
+ * Get chat messages from sessionId
  * @param {IReactFlowNode} memoryNode
- * @param {IncomingInput} incomingInput
+ * @param {string} sessionId
+ * @param {IReactFlowNode} memoryNode
+ * @param {IComponentNodes} componentNodes
  * @param {DataSource} appDataSource
  * @param {IDatabaseEntity} databaseEntities
  * @param {any} logger
- * @returns {string}
+ * @returns {IMessage[]}
  */
 export const getSessionChatHistory = async (
+    chatflowid: string,
+    sessionId: string,
     memoryNode: IReactFlowNode,
     componentNodes: IComponentNodes,
-    incomingInput: IncomingInput,
     appDataSource: DataSource,
     databaseEntities: IDatabaseEntity,
     logger: any
@@ -1084,19 +1216,18 @@ export const getSessionChatHistory = async (
     const newNodeInstance = new nodeModule.nodeClass()
 
     // Replace memory's sessionId/chatId
-    if (incomingInput.overrideConfig?.sessionId && memoryNode.data.inputs) {
-        memoryNode.data.inputs.sessionId = incomingInput.overrideConfig.sessionId
-    } else if (incomingInput.chatId && memoryNode.data.inputs) {
-        memoryNode.data.inputs.sessionId = incomingInput.chatId
+    if (memoryNode.data.inputs) {
+        memoryNode.data.inputs.sessionId = sessionId
     }
 
     const initializedInstance: FlowiseMemory = await newNodeInstance.init(memoryNode.data, '', {
+        chatflowid,
         appDataSource,
         databaseEntities,
         logger
     })
 
-    return (await initializedInstance.getChatMessages()) as IMessage[]
+    return (await initializedInstance.getChatMessages(sessionId)) as IMessage[]
 }
 
 /**
@@ -1104,7 +1235,7 @@ export const getSessionChatHistory = async (
  * In a chatflow, there should only be 1 memory node
  * @param {IReactFlowNode[]} nodes
  * @param {IReactFlowEdge[]} edges
- * @returns {string | undefined}
+ * @returns {IReactFlowNode | undefined}
  */
 export const findMemoryNode = (nodes: IReactFlowNode[], edges: IReactFlowEdge[]): IReactFlowNode | undefined => {
     const memoryNodes = nodes.filter((node) => node.data.category === 'Memory')
@@ -1116,6 +1247,7 @@ export const findMemoryNode = (nodes: IReactFlowNode[], edges: IReactFlowEdge[])
             return memoryNode
         }
     }
+
     return undefined
 }
 
