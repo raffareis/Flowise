@@ -1,9 +1,10 @@
-import { IMessage, INode, INodeData, INodeParams, MemoryMethods, MessageType } from '../../../src/Interface'
+import { ZepMemory, ZepMemoryInput } from '@langchain/community/memory/zep'
+import { BaseMessage } from '@langchain/core/messages'
+import { InputValues, MemoryVariables, OutputValues, getBufferString } from 'langchain/memory'
+import { IMessage, INode, INodeData, INodeParams, MemoryMethods, MessageType, ICommonObject } from '../../../src/Interface'
 import { convertBaseMessagetoIMessage, getBaseClasses, getCredentialData, getCredentialParam } from '../../../src/utils'
-import { ZepMemory, ZepMemoryInput } from 'langchain/memory/zep'
-import { ICommonObject } from '../../../src'
-import { InputValues, MemoryVariables, OutputValues } from 'langchain/memory'
-import { BaseMessage } from 'langchain/schema'
+import { Memory, NotFoundError } from '@getzep/zep-js'
+import { AIMessage, HumanMessage, SystemMessage } from 'langchain/schema'
 
 class ZepMemory_Memory implements INode {
     label: string
@@ -18,9 +19,9 @@ class ZepMemory_Memory implements INode {
     inputs: INodeParams[]
 
     constructor() {
-        this.label = 'Zep Memory'
+        this.label = 'Zep Memory - Open Source'
         this.name = 'ZepMemory'
-        this.version = 2.0
+        this.version = 2.01
         this.type = 'ZepMemory'
         this.icon = 'zep.svg'
         this.category = 'Memory'
@@ -98,11 +99,11 @@ class ZepMemory_Memory implements INode {
     }
 
     async init(nodeData: INodeData, _: string, options: ICommonObject): Promise<any> {
-        return await initalizeZep(nodeData, options)
+        return await initializeZep(nodeData, options)
     }
 }
 
-const initalizeZep = async (nodeData: INodeData, options: ICommonObject): Promise<ZepMemory> => {
+const initializeZep = async (nodeData: INodeData, options: ICommonObject): Promise<ZepMemory> => {
     const baseURL = nodeData.inputs?.baseURL as string
     const aiPrefix = nodeData.inputs?.aiPrefix as string
     const humanPrefix = nodeData.inputs?.humanPrefix as string
@@ -145,13 +146,57 @@ class ZepMemoryExtended extends ZepMemory implements MemoryMethods {
         if (overrideSessionId) {
             this.sessionId = overrideSessionId
         }
-        return super.loadMemoryVariables({ ...values, lastN: this.lastN })
+        // Wait for ZepClient to be initialized
+        const zepClient = await this.zepClientPromise
+        if (!zepClient) {
+            throw new Error('ZepClient not initialized')
+        }
+
+        const lastN = values.lastN ?? undefined
+
+        let memory: Memory | null = null
+        try {
+            memory = await zepClient.memory.getMemory(this.sessionId, lastN)
+        } catch (error) {
+            if (error instanceof NotFoundError) {
+                const result = this.returnMessages ? { [this.memoryKey]: [] } : { [this.memoryKey]: '' }
+                return result
+            } else {
+                throw error
+            }
+        }
+
+        let messages: BaseMessage[] = memory && memory.summary?.content ? [new SystemMessage(memory.summary.content)] : []
+
+        if (memory) {
+            messages = messages.concat(
+                memory.messages.map((message) => {
+                    const { content, role } = message
+
+                    if (role === this.aiPrefix) {
+                        return new AIMessage(content)
+                    } else {
+                        return new HumanMessage({ content, name: role })
+                    }
+                })
+            )
+        }
+
+        if (this.returnMessages) {
+            return {
+                [this.memoryKey]: messages
+            }
+        }
+        return {
+            [this.memoryKey]: getBufferString(messages, this.humanPrefix, this.aiPrefix)
+        }
     }
 
     async saveContext(inputValues: InputValues, outputValues: OutputValues, overrideSessionId = ''): Promise<void> {
         if (overrideSessionId) {
             this.sessionId = overrideSessionId
         }
+
         return super.saveContext(inputValues, outputValues)
     }
 
@@ -163,14 +208,14 @@ class ZepMemoryExtended extends ZepMemory implements MemoryMethods {
     }
 
     async getChatMessages(overrideSessionId = '', returnBaseMessages = false): Promise<IMessage[] | BaseMessage[]> {
-        const id = overrideSessionId ?? this.sessionId
+        const id = overrideSessionId ? overrideSessionId : this.sessionId
         const memoryVariables = await this.loadMemoryVariables({}, id)
         const baseMessages = memoryVariables[this.memoryKey]
         return returnBaseMessages ? baseMessages : convertBaseMessagetoIMessage(baseMessages)
     }
 
     async addChatMessages(msgArray: { text: string; type: MessageType }[], overrideSessionId = ''): Promise<void> {
-        const id = overrideSessionId ?? this.sessionId
+        const id = overrideSessionId ? overrideSessionId : this.sessionId
         const input = msgArray.find((msg) => msg.type === 'userMessage')
         const output = msgArray.find((msg) => msg.type === 'apiMessage')
         const inputValues = { [this.inputKey ?? 'input']: input?.text }
@@ -180,7 +225,7 @@ class ZepMemoryExtended extends ZepMemory implements MemoryMethods {
     }
 
     async clearChatMessages(overrideSessionId = ''): Promise<void> {
-        const id = overrideSessionId ?? this.sessionId
+        const id = overrideSessionId ? overrideSessionId : this.sessionId
         await this.clear(id)
     }
 }
