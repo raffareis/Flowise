@@ -31,6 +31,7 @@ export interface IChatFlow {
 export interface IChatMessage {
     id: string
     role: MessageType
+    name?: string
     content: string
     chatflowid: string
     sourceDocuments?: string

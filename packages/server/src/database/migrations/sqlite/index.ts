@@ -18,6 +18,7 @@ import { AddFeedback1707213619308 } from './1707213619308-AddFeedback'
 import { AddDocumentStore1711637331047 } from './1711637331047-AddDocumentStore'
 import { AddLead1710832117612 } from './1710832117612-AddLead'
 import { AddLeadToChatMessage1711537986113 } from './1711537986113-AddLeadToChatMessage'
+import { AddNameToChatHistory1711637331047 } from './1711637331048-AddNameToChatHistory'
 
 export const sqliteMigrations = [
     Init1693835579790,
@@ -39,5 +40,6 @@ export const sqliteMigrations = [
     AddFeedback1707213619308,
     AddDocumentStore1711637331047,
     AddLead1710832117612,
-    AddLeadToChatMessage1711537986113
+    AddLeadToChatMessage1711537986113,
+    AddNameToChatHistory1711637331047
 ]

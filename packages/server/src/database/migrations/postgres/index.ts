@@ -19,6 +19,7 @@ import { FieldTypes1710497452584 } from './1710497452584-FieldTypes'
 import { AddDocumentStore1711637331047 } from './1711637331047-AddDocumentStore'
 import { AddLead1710832137905 } from './1710832137905-AddLead'
 import { AddLeadToChatMessage1711538016098 } from './1711538016098-AddLeadToChatMessage'
+import { AddNameToChatHistory1711637331047 } from './1711637331048-AddNameToChatHistory'
 
 export const postgresMigrations = [
     Init1693891895163,
@@ -41,5 +42,6 @@ export const postgresMigrations = [
     FieldTypes1710497452584,
     AddDocumentStore1711637331047,
     AddLead1710832137905,
-    AddLeadToChatMessage1711538016098
+    AddLeadToChatMessage1711538016098,
+    AddNameToChatHistory1711637331047
 ]
