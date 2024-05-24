@@ -197,7 +197,7 @@ const prepareAgent = async (
     const prompt = ChatPromptTemplate.fromMessages([
         ['system', systemMessage],
         new MessagesPlaceholder(memoryKey),
-        //HumanMessagePromptTemplate.fromTemplate(`{${inputKey}}`, { name: memory.humanPrefix }),
+        //HumanMessagePromptTemplate.fromTemplate(`{${inputKey}}`, { name: memory.humanPrefix }), //Essa joça não funciona, não manda o "name" pra frente
         new MessagesPlaceholder('human_msg'),
         new MessagesPlaceholder('agent_scratchpad')
     ])
