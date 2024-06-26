@@ -2,6 +2,8 @@
 
 # Flowise - Low-Code LLM apps builder
 
+English | [中文](./README-ZH.md)
+
 ![Flowise](https://github.com/FlowiseAI/Flowise/blob/main/images/flowise.gif?raw=true)
 
 Drag & drop UI to build your customized LLM flow
@@ -31,24 +33,25 @@ FLOWISE_PASSWORD=1234
 
 ## 🌱 Env Variables
 
-Flowise support different environment variables to configure your instance. You can specify the following variables in the `.env` file inside `packages/server` folder.
-
-| Variable         | Description                                                      | Type                                             | Default                             |
-| ---------------- | ---------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------- |
-| PORT             | The HTTP port Flowise runs on                                    | Number                                           | 3000                                |
-| FLOWISE_USERNAME | Username to login                                                | String                                           |
-| FLOWISE_PASSWORD | Password to login                                                | String                                           |
-| DEBUG            | Print logs from components                                       | Boolean                                          |
-| LOG_PATH         | Location where log files are stored                              | String                                           | `your-path/Flowise/logs`            |
-| LOG_LEVEL        | Different levels of logs                                         | Enum String: `error`, `info`, `verbose`, `debug` | `info`                              |
-| DATABASE_PATH    | Location where database is saved                                 | String                                           | `your-home-dir/.flowise`            |
-| APIKEY_PATH      | Location where api keys are saved                                | String                                           | `your-path/Flowise/packages/server` |
-| EXECUTION_MODE   | Whether predictions run in their own process or the main process | Enum String: `child`, `main`                     | `main`                              |
+Flowise support different environment variables to configure your instance. You can specify the following variables in the `.env` file inside `packages/server` folder. Read [more](https://github.com/FlowiseAI/Flowise/blob/main/CONTRIBUTING.md#-env-variables)
 
 You can also specify the env variables when using `npx`. For example:
 
 ```
 npx flowise start --PORT=3000 --DEBUG=true
+```
+
+## 📖 Tests
+
+We use [Cypress](https://github.com/cypress-io) for our e2e testing. If you want to run the test suite in dev mode please follow this guide:
+
+```sh
+cd Flowise/packages/server
+pnpm install
+./node_modules/.bin/cypress install
+pnpm build
+#Only for writting new tests on local dev -> pnpm run cypress:open
+pnpm run e2e
 ```
 
 ## 📖 Documentation
@@ -87,4 +90,4 @@ See [contributing guide](https://github.com/FlowiseAI/Flowise/blob/master/CONTRI
 
 ## 📄 License
 
-Source code in this repository is made available under the [MIT License](https://github.com/FlowiseAI/Flowise/blob/master/LICENSE.md).
+Source code in this repository is made available under the [Apache License Version 2.0](https://github.com/FlowiseAI/Flowise/blob/master/LICENSE.md).

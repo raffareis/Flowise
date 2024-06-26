@@ -1,239 +1,8 @@
 {
     "description": "Basic example of stateless (no memory) LLM Chain with a Prompt Template and LLM Model",
+    "categories": "OpenAI,LLM Chain,Langchain",
+    "framework": "Langchain",
     "nodes": [
-        {
-            "width": 300,
-            "height": 524,
-            "id": "openAI_1",
-            "position": {
-                "x": 510.75932526856377,
-                "y": -44.80152395958956
-            },
-            "type": "customNode",
-            "data": {
-                "id": "openAI_1",
-                "label": "OpenAI",
-                "name": "openAI",
-                "type": "OpenAI",
-                "baseClasses": ["OpenAI", "BaseLLM", "BaseLanguageModel", "BaseLangChain"],
-                "category": "LLMs",
-                "description": "Wrapper around OpenAI large language models",
-                "inputParams": [
-                    {
-                        "label": "OpenAI Api Key",
-                        "name": "openAIApiKey",
-                        "type": "password",
-                        "id": "openAI_1-input-openAIApiKey-password"
-                    },
-                    {
-                        "label": "Model Name",
-                        "name": "modelName",
-                        "type": "options",
-                        "options": [
-                            {
-                                "label": "text-davinci-003",
-                                "name": "text-davinci-003"
-                            },
-                            {
-                                "label": "text-davinci-002",
-                                "name": "text-davinci-002"
-                            },
-                            {
-                                "label": "text-curie-001",
-                                "name": "text-curie-001"
-                            },
-                            {
-                                "label": "text-babbage-001",
-                                "name": "text-babbage-001"
-                            }
-                        ],
-                        "default": "text-davinci-003",
-                        "optional": true,
-                        "id": "openAI_1-input-modelName-options"
-                    },
-                    {
-                        "label": "Temperature",
-                        "name": "temperature",
-                        "type": "number",
-                        "default": 0.7,
-                        "optional": true,
-                        "id": "openAI_1-input-temperature-number"
-                    },
-                    {
-                        "label": "Max Tokens",
-                        "name": "maxTokens",
-                        "type": "number",
-                        "optional": true,
-                        "additionalParams": true,
-                        "id": "openAI_1-input-maxTokens-number"
-                    },
-                    {
-                        "label": "Top Probability",
-                        "name": "topP",
-                        "type": "number",
-                        "optional": true,
-                        "additionalParams": true,
-                        "id": "openAI_1-input-topP-number"
-                    },
-                    {
-                        "label": "Best Of",
-                        "name": "bestOf",
-                        "type": "number",
-                        "optional": true,
-                        "additionalParams": true,
-                        "id": "openAI_1-input-bestOf-number"
-                    },
-                    {
-                        "label": "Frequency Penalty",
-                        "name": "frequencyPenalty",
-                        "type": "number",
-                        "optional": true,
-                        "additionalParams": true,
-                        "id": "openAI_1-input-frequencyPenalty-number"
-                    },
-                    {
-                        "label": "Presence Penalty",
-                        "name": "presencePenalty",
-                        "type": "number",
-                        "optional": true,
-                        "additionalParams": true,
-                        "id": "openAI_1-input-presencePenalty-number"
-                    },
-                    {
-                        "label": "Batch Size",
-                        "name": "batchSize",
-                        "type": "number",
-                        "optional": true,
-                        "additionalParams": true,
-                        "id": "openAI_1-input-batchSize-number"
-                    },
-                    {
-                        "label": "Timeout",
-                        "name": "timeout",
-                        "type": "number",
-                        "optional": true,
-                        "additionalParams": true,
-                        "id": "openAI_1-input-timeout-number"
-                    },
-                    {
-                        "label": "BasePath",
-                        "name": "basepath",
-                        "type": "string",
-                        "optional": true,
-                        "additionalParams": true,
-                        "id": "openAI_1-input-basepath-string"
-                    }
-                ],
-                "inputAnchors": [],
-                "inputs": {
-                    "modelName": "text-davinci-003",
-                    "temperature": 0.7,
-                    "maxTokens": "",
-                    "topP": "",
-                    "bestOf": "",
-                    "frequencyPenalty": "",
-                    "presencePenalty": "",
-                    "batchSize": "",
-                    "timeout": ""
-                },
-                "outputAnchors": [
-                    {
-                        "id": "openAI_1-output-openAI-OpenAI|BaseLLM|BaseLanguageModel|BaseLangChain",
-                        "name": "openAI",
-                        "label": "OpenAI",
-                        "type": "OpenAI | BaseLLM | BaseLanguageModel | BaseLangChain"
-                    }
-                ],
-                "outputs": {},
-                "selected": false
-            },
-            "selected": false,
-            "positionAbsolute": {
-                "x": 510.75932526856377,
-                "y": -44.80152395958956
-            },
-            "dragging": false
-        },
-        {
-            "width": 300,
-            "height": 405,
-            "id": "llmChain_1",
-            "position": {
-                "x": 970.9254258940236,
-                "y": 320.56761595884564
-            },
-            "type": "customNode",
-            "data": {
-                "id": "llmChain_1",
-                "label": "LLM Chain",
-                "name": "llmChain",
-                "type": "LLMChain",
-                "baseClasses": ["LLMChain", "BaseChain", "BaseLangChain"],
-                "category": "Chains",
-                "description": "Chain to run queries against LLMs",
-                "inputParams": [
-                    {
-                        "label": "Chain Name",
-                        "name": "chainName",
-                        "type": "string",
-                        "placeholder": "Name Your Chain",
-                        "optional": true,
-                        "id": "llmChain_1-input-chainName-string"
-                    }
-                ],
-                "inputAnchors": [
-                    {
-                        "label": "Language Model",
-                        "name": "model",
-                        "type": "BaseLanguageModel",
-                        "id": "llmChain_1-input-model-BaseLanguageModel"
-                    },
-                    {
-                        "label": "Prompt",
-                        "name": "prompt",
-                        "type": "BasePromptTemplate",
-                        "id": "llmChain_1-input-prompt-BasePromptTemplate"
-                    }
-                ],
-                "inputs": {
-                    "model": "{{openAI_1.data.instance}}",
-                    "prompt": "{{promptTemplate_0.data.instance}}",
-                    "chainName": ""
-                },
-                "outputAnchors": [
-                    {
-                        "name": "output",
-                        "label": "Output",
-                        "type": "options",
-                        "options": [
-                            {
-                                "id": "llmChain_1-output-llmChain-LLMChain|BaseChain|BaseLangChain",
-                                "name": "llmChain",
-                                "label": "LLM Chain",
-                                "type": "LLMChain | BaseChain | BaseLangChain"
-                            },
-                            {
-                                "id": "llmChain_1-output-outputPrediction-string|json",
-                                "name": "outputPrediction",
-                                "label": "Output Prediction",
-                                "type": "string | json"
-                            }
-                        ],
-                        "default": "llmChain"
-                    }
-                ],
-                "outputs": {
-                    "output": "llmChain"
-                },
-                "selected": false
-            },
-            "positionAbsolute": {
-                "x": 970.9254258940236,
-                "y": 320.56761595884564
-            },
-            "selected": false,
-            "dragging": false
-        },
         {
             "width": 300,
             "height": 475,
@@ -246,6 +15,7 @@
             "data": {
                 "id": "promptTemplate_0",
                 "label": "Prompt Template",
+                "version": 1,
                 "name": "promptTemplate",
                 "type": "PromptTemplate",
                 "baseClasses": ["PromptTemplate", "BaseStringPromptTemplate", "BasePromptTemplate"],
@@ -292,16 +62,261 @@
                 "y": 506.7411400888471
             },
             "dragging": false
+        },
+        {
+            "width": 300,
+            "height": 574,
+            "id": "openAI_0",
+            "position": {
+                "x": 513.3297923232442,
+                "y": -112.67554802812833
+            },
+            "type": "customNode",
+            "data": {
+                "id": "openAI_0",
+                "label": "OpenAI",
+                "version": 4.0,
+                "name": "openAI",
+                "type": "OpenAI",
+                "baseClasses": ["OpenAI", "BaseLLM", "BaseLanguageModel"],
+                "category": "LLMs",
+                "description": "Wrapper around OpenAI large language models",
+                "inputParams": [
+                    {
+                        "label": "Connect Credential",
+                        "name": "credential",
+                        "type": "credential",
+                        "credentialNames": ["openAIApi"],
+                        "id": "openAI_0-input-credential-credential"
+                    },
+                    {
+                        "label": "Model Name",
+                        "name": "modelName",
+                        "type": "asyncOptions",
+                        "loadMethod": "listModels",
+                        "default": "gpt-3.5-turbo-instruct",
+                        "id": "openAI_0-input-modelName-options"
+                    },
+                    {
+                        "label": "Temperature",
+                        "name": "temperature",
+                        "type": "number",
+                        "default": 0.7,
+                        "optional": true,
+                        "id": "openAI_0-input-temperature-number"
+                    },
+                    {
+                        "label": "Max Tokens",
+                        "name": "maxTokens",
+                        "type": "number",
+                        "optional": true,
+                        "additionalParams": true,
+                        "id": "openAI_0-input-maxTokens-number"
+                    },
+                    {
+                        "label": "Top Probability",
+                        "name": "topP",
+                        "type": "number",
+                        "optional": true,
+                        "additionalParams": true,
+                        "id": "openAI_0-input-topP-number"
+                    },
+                    {
+                        "label": "Best Of",
+                        "name": "bestOf",
+                        "type": "number",
+                        "optional": true,
+                        "additionalParams": true,
+                        "id": "openAI_0-input-bestOf-number"
+                    },
+                    {
+                        "label": "Frequency Penalty",
+                        "name": "frequencyPenalty",
+                        "type": "number",
+                        "optional": true,
+                        "additionalParams": true,
+                        "id": "openAI_0-input-frequencyPenalty-number"
+                    },
+                    {
+                        "label": "Presence Penalty",
+                        "name": "presencePenalty",
+                        "type": "number",
+                        "optional": true,
+                        "additionalParams": true,
+                        "id": "openAI_0-input-presencePenalty-number"
+                    },
+                    {
+                        "label": "Batch Size",
+                        "name": "batchSize",
+                        "type": "number",
+                        "optional": true,
+                        "additionalParams": true,
+                        "id": "openAI_0-input-batchSize-number"
+                    },
+                    {
+                        "label": "Timeout",
+                        "name": "timeout",
+                        "type": "number",
+                        "optional": true,
+                        "additionalParams": true,
+                        "id": "openAI_0-input-timeout-number"
+                    },
+                    {
+                        "label": "BasePath",
+                        "name": "basepath",
+                        "type": "string",
+                        "optional": true,
+                        "additionalParams": true,
+                        "id": "openAI_0-input-basepath-string"
+                    }
+                ],
+                "inputAnchors": [
+                    {
+                        "label": "Cache",
+                        "name": "cache",
+                        "type": "BaseCache",
+                        "optional": true,
+                        "id": "openAI_0-input-cache-BaseCache"
+                    }
+                ],
+                "inputs": {
+                    "modelName": "gpt-3.5-turbo-instruct",
+                    "temperature": 0.7,
+                    "maxTokens": "",
+                    "topP": "",
+                    "bestOf": "",
+                    "frequencyPenalty": "",
+                    "presencePenalty": "",
+                    "batchSize": "",
+                    "timeout": "",
+                    "basepath": ""
+                },
+                "outputAnchors": [
+                    {
+                        "id": "openAI_0-output-openAI-OpenAI|BaseLLM|BaseLanguageModel",
+                        "name": "openAI",
+                        "label": "OpenAI",
+                        "type": "OpenAI | BaseLLM | BaseLanguageModel"
+                    }
+                ],
+                "outputs": {},
+                "selected": false
+            },
+            "selected": false,
+            "positionAbsolute": {
+                "x": 513.3297923232442,
+                "y": -112.67554802812833
+            },
+            "dragging": false
+        },
+        {
+            "width": 300,
+            "height": 456,
+            "id": "llmChain_0",
+            "position": {
+                "x": 919.263534910828,
+                "y": 318.465734712124
+            },
+            "type": "customNode",
+            "data": {
+                "id": "llmChain_0",
+                "label": "LLM Chain",
+                "version": 3,
+                "name": "llmChain",
+                "type": "LLMChain",
+                "baseClasses": ["LLMChain", "BaseChain", "Runnable"],
+                "category": "Chains",
+                "description": "Chain to run queries against LLMs",
+                "inputParams": [
+                    {
+                        "label": "Chain Name",
+                        "name": "chainName",
+                        "type": "string",
+                        "placeholder": "Name Your Chain",
+                        "optional": true,
+                        "id": "llmChain_0-input-chainName-string"
+                    }
+                ],
+                "inputAnchors": [
+                    {
+                        "label": "Language Model",
+                        "name": "model",
+                        "type": "BaseLanguageModel",
+                        "id": "llmChain_0-input-model-BaseLanguageModel"
+                    },
+                    {
+                        "label": "Prompt",
+                        "name": "prompt",
+                        "type": "BasePromptTemplate",
+                        "id": "llmChain_0-input-prompt-BasePromptTemplate"
+                    },
+                    {
+                        "label": "Output Parser",
+                        "name": "outputParser",
+                        "type": "BaseLLMOutputParser",
+                        "optional": true,
+                        "id": "llmChain_0-input-outputParser-BaseLLMOutputParser"
+                    },
+                    {
+                        "label": "Input Moderation",
+                        "description": "Detect text that could generate harmful output and prevent it from being sent to the language model",
+                        "name": "inputModeration",
+                        "type": "Moderation",
+                        "optional": true,
+                        "list": true,
+                        "id": "llmChain_0-input-inputModeration-Moderation"
+                    }
+                ],
+                "inputs": {
+                    "model": "{{openAI_0.data.instance}}",
+                    "prompt": "{{promptTemplate_0.data.instance}}",
+                    "outputParser": "",
+                    "chainName": "",
+                    "inputModeration": ""
+                },
+                "outputAnchors": [
+                    {
+                        "name": "output",
+                        "label": "Output",
+                        "type": "options",
+                        "options": [
+                            {
+                                "id": "llmChain_0-output-llmChain-LLMChain|BaseChain|Runnable",
+                                "name": "llmChain",
+                                "label": "LLM Chain",
+                                "type": "LLMChain | BaseChain | Runnable"
+                            },
+                            {
+                                "id": "llmChain_0-output-outputPrediction-string|json",
+                                "name": "outputPrediction",
+                                "label": "Output Prediction",
+                                "type": "string | json"
+                            }
+                        ],
+                        "default": "llmChain"
+                    }
+                ],
+                "outputs": {
+                    "output": "llmChain"
+                },
+                "selected": false
+            },
+            "selected": false,
+            "positionAbsolute": {
+                "x": 919.263534910828,
+                "y": 318.465734712124
+            },
+            "dragging": false
         }
     ],
     "edges": [
         {
-            "source": "openAI_1",
-            "sourceHandle": "openAI_1-output-openAI-OpenAI|BaseLLM|BaseLanguageModel|BaseLangChain",
-            "target": "llmChain_1",
-            "targetHandle": "llmChain_1-input-model-BaseLanguageModel",
+            "source": "openAI_0",
+            "sourceHandle": "openAI_0-output-openAI-OpenAI|BaseLLM|BaseLanguageModel",
+            "target": "llmChain_0",
+            "targetHandle": "llmChain_0-input-model-BaseLanguageModel",
             "type": "buttonedge",
-            "id": "openAI_1-openAI_1-output-openAI-OpenAI|BaseLLM|BaseLanguageModel|BaseLangChain-llmChain_1-llmChain_1-input-model-BaseLanguageModel",
+            "id": "openAI_0-openAI_0-output-openAI-OpenAI|BaseLLM|BaseLanguageModel-llmChain_0-llmChain_0-input-model-BaseLanguageModel",
             "data": {
                 "label": ""
             }
@@ -309,10 +324,10 @@
         {
             "source": "promptTemplate_0",
             "sourceHandle": "promptTemplate_0-output-promptTemplate-PromptTemplate|BaseStringPromptTemplate|BasePromptTemplate",
-            "target": "llmChain_1",
-            "targetHandle": "llmChain_1-input-prompt-BasePromptTemplate",
+            "target": "llmChain_0",
+            "targetHandle": "llmChain_0-input-prompt-BasePromptTemplate",
             "type": "buttonedge",
-            "id": "promptTemplate_0-promptTemplate_0-output-promptTemplate-PromptTemplate|BaseStringPromptTemplate|BasePromptTemplate-llmChain_1-llmChain_1-input-prompt-BasePromptTemplate",
+            "id": "promptTemplate_0-promptTemplate_0-output-promptTemplate-PromptTemplate|BaseStringPromptTemplate|BasePromptTemplate-llmChain_0-llmChain_0-input-prompt-BasePromptTemplate",
             "data": {
                 "label": ""
             }
