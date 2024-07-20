@@ -43,40 +43,39 @@ export class App {
 
     async initDatabase() {
         // Initialize database
-        this.AppDataSource.initialize()
-            .then(async () => {
-                logger.info('📦 [server]: Data Source is initializing...')
+        try {
+            await this.AppDataSource.initialize()
+            logger.info('📦 [server]: Data Source is initializing...')
 
-                // Run Migrations Scripts
-                await this.AppDataSource.runMigrations({ transaction: 'each' })
+            // Run Migrations Scripts
+            await this.AppDataSource.runMigrations({ transaction: 'each' })
 
-                // Initialize nodes pool
-                this.nodesPool = new NodesPool()
-                await this.nodesPool.initialize()
+            // Initialize nodes pool
+            this.nodesPool = new NodesPool()
+            await this.nodesPool.initialize()
 
-                // Initialize chatflow pool
-                this.chatflowPool = new ChatflowPool()
+            // Initialize chatflow pool
+            this.chatflowPool = new ChatflowPool()
 
-                // Initialize API keys
-                await getAPIKeys()
+            // Initialize API keys
+            await getAPIKeys()
 
-                // Initialize encryption key
-                await getEncryptionKey()
+            // Initialize encryption key
+            await getEncryptionKey()
 
-                // Initialize Rate Limit
-                const AllChatFlow: IChatFlow[] = await getAllChatFlow()
-                await initializeRateLimiter(AllChatFlow)
+            // Initialize Rate Limit
+            const AllChatFlow: IChatFlow[] = await getAllChatFlow()
+            await initializeRateLimiter(AllChatFlow)
 
-                // Initialize cache pool
-                this.cachePool = new CachePool()
+            // Initialize cache pool
+            this.cachePool = new CachePool()
 
-                // Initialize telemetry
-                this.telemetry = new Telemetry()
-                logger.info('📦 [server]: Data Source has been initialized!')
-            })
-            .catch((err) => {
-                logger.error('❌ [server]: Error during Data Source initialization:', err)
-            })
+            // Initialize telemetry
+            this.telemetry = new Telemetry()
+            logger.info('📦 [server]: Data Source has been initialized!')
+        } catch (error) {
+            logger.error('❌ [server]: Error during Data Source initialization:', error)
+        }
     }
 
     async config(socketIO?: Server) {
@@ -138,11 +137,12 @@ export class App {
                 '/api/v1/feedback',
                 '/api/v1/leads',
                 '/api/v1/get-upload-file',
-                '/api/v1/ip'
+                '/api/v1/ip',
+                '/api/v1/ping'
             ]
             this.app.use((req, res, next) => {
-                if (req.url.includes('/api/v1/')) {
-                    whitelistURLs.some((url) => req.url.includes(url)) ? next() : basicAuthMiddleware(req, res, next)
+                if (/\/api\/v1\//i.test(req.url)) {
+                    whitelistURLs.some((url) => new RegExp(url, 'i').test(req.url)) ? next() : basicAuthMiddleware(req, res, next)
                 } else next()
             })
         }
@@ -198,6 +198,7 @@ export async function getAllChatFlow(): Promise<IChatFlow[]> {
 export async function start(): Promise<void> {
     serverApp = new App()
 
+    const host = process.env.HOST
     const port = parseInt(process.env.PORT || '', 10) || 3000
     const server = http.createServer(serverApp.app)
 
@@ -208,8 +209,8 @@ export async function start(): Promise<void> {
     await serverApp.initDatabase()
     await serverApp.config(io)
 
-    server.listen(port, () => {
-        logger.info(`⚡️ [server]: Flowise Server is listening at ${port}`)
+    server.listen(port, host, () => {
+        logger.info(`⚡️ [server]: Flowise Server is listening at ${host ? 'http://' + host : ''}:${port}`)
     })
 }
 
