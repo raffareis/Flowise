@@ -10,7 +10,7 @@ import {
     mapChatMessageToBaseMessage
 } from '../../../src/utils'
 import { Memory, NotFoundError } from '@getzep/zep-js'
-import { AIMessage, HumanMessage, SystemMessage } from 'langchain/schema'
+import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages'
 
 class ZepMemory_Memory implements INode {
     label: string
