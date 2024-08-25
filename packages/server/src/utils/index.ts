@@ -486,6 +486,13 @@ export const buildFlow = async ({
 
     const initializedNodes: Set<string> = new Set()
     const reversedGraph = constructGraphs(reactFlowNodes, reactFlowEdges, { isReversed: true }).graph
+
+    const options: ICommonObject = {
+        chatflowid,
+        chatId,
+        sessionId,
+        chatHistory
+    }
     while (nodeQueue.length) {
         const { nodeId, depth } = nodeQueue.shift() as INodeQueue
 
@@ -510,7 +517,8 @@ export const buildFlow = async ({
                 flowNodes,
                 question,
                 chatHistory,
-                overrideConfig
+                overrideConfig,
+                options
             )
 
             if (isUpsert && stopNodeId && nodeId === stopNodeId) {
@@ -761,7 +769,8 @@ export const getVariableValue = async (
     question: string,
     chatHistory: IMessage[],
     isAcceptVariable = false,
-    overrideConfig?: ICommonObject
+    overrideConfig?: ICommonObject,
+    options?: ICommonObject
 ) => {
     const isObject = typeof paramValue === 'object'
     let returnVal = (isObject ? JSON.stringify(paramValue) : paramValue) ?? ''
@@ -800,6 +809,14 @@ export const getVariableValue = async (
             if (variableFullPath.startsWith('$vars.')) {
                 const vars = await getGlobalVariable(appDataSource, overrideConfig)
                 const variableValue = get(vars, variableFullPath.replace('$vars.', ''))
+                if (variableValue) {
+                    variableDict[`{{${variableFullPath}}}`] = variableValue
+                    returnVal = returnVal.split(`{{${variableFullPath}}}`).join(variableValue)
+                }
+            }
+
+            if (variableFullPath.startsWith('$flow.') && options) {
+                const variableValue = get(options, variableFullPath.replace('$flow.', ''))
                 if (variableValue) {
                     variableDict[`{{${variableFullPath}}}`] = variableValue
                     returnVal = returnVal.split(`{{${variableFullPath}}}`).join(variableValue)
@@ -898,7 +915,8 @@ export const resolveVariables = async (
     reactFlowNodes: IReactFlowNode[],
     question: string,
     chatHistory: IMessage[],
-    overrideConfig?: ICommonObject
+    overrideConfig?: ICommonObject,
+    options?: ICommonObject
 ): Promise<INodeData> => {
     let flowNodeData = cloneDeep(reactFlowNodeData)
     const types = 'inputs'
@@ -916,7 +934,8 @@ export const resolveVariables = async (
                         question,
                         chatHistory,
                         undefined,
-                        overrideConfig
+                        overrideConfig,
+                        options
                     )
                     resolvedInstances.push(resolvedInstance)
                 }
@@ -930,7 +949,8 @@ export const resolveVariables = async (
                     question,
                     chatHistory,
                     isAcceptVariable,
-                    overrideConfig
+                    overrideConfig,
+                    options
                 )
                 paramsObj[key] = resolvedInstance
             }
