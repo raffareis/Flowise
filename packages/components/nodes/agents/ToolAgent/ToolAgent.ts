@@ -7,7 +7,7 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { ChatPromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate, PromptTemplate } from '@langchain/core/prompts'
 import { formatToOpenAIToolMessages } from 'langchain/agents/format_scratchpad/openai_tools'
 import { type ToolsAgentStep } from 'langchain/agents/openai/output_parser'
-import { getBaseClasses } from '../../../src/utils'
+import { getBaseClasses, handleEscapeCharacters } from '../../../src/utils'
 import { FlowiseMemory, ICommonObject, INode, INodeData, INodeParams, IUsedTool, IVisionChatModal } from '../../../src/Interface'
 import { ConsoleCallbackHandler, CustomChainHandler, additionalCallbacks } from '../../../src/handler'
 import { AgentExecutor, ToolCallingAgentOutputParser } from '../../../src/agents'
@@ -31,7 +31,7 @@ class ToolAgent_Agents implements INode {
     constructor(fields?: { sessionId?: string }) {
         this.label = 'Tool Agent'
         this.name = 'toolAgent'
-        this.version = 1.0
+        this.version = 2.0
         this.type = 'AgentExecutor'
         this.category = 'Agents'
         this.icon = 'toolAgent.png'
@@ -57,10 +57,18 @@ class ToolAgent_Agents implements INode {
                     'Only compatible with models that are capable of function calling: ChatOpenAI, ChatMistral, ChatAnthropic, ChatGoogleGenerativeAI, ChatVertexAI, GroqChat'
             },
             {
+                label: 'Chat Prompt Template',
+                name: 'chatPromptTemplate',
+                type: 'ChatPromptTemplate',
+                description: 'Override existing prompt with Chat Prompt Template. Human Message must includes {input} variable',
+                optional: true
+            },
+            {
                 label: 'System Message',
                 name: 'systemMessage',
                 type: 'string',
                 default: `You are a helpful AI assistant.`,
+                description: 'If Chat Prompt Template is provided, this will be ignored',
                 rows: 4,
                 optional: true,
                 additionalParams: true
@@ -211,13 +219,38 @@ const prepareAgent = async (
     const inputKey = memory.inputKey ? memory.inputKey : 'input'
     const prependMessages = options?.prependMessages
 
-    const prompt = ChatPromptTemplate.fromMessages([
+    let prompt = ChatPromptTemplate.fromMessages([
         ['system', systemMessage],
         new MessagesPlaceholder(memoryKey),
         //HumanMessagePromptTemplate.fromTemplate(`{${inputKey}}`, { name: memory.humanPrefix }), //Essa joça não funciona, não manda o "name" pra frente
         new MessagesPlaceholder('human_msg'),
         new MessagesPlaceholder('agent_scratchpad')
     ])
+
+    let promptVariables = {}
+    const chatPromptTemplate = nodeData.inputs?.chatPromptTemplate as ChatPromptTemplate
+    if (chatPromptTemplate && chatPromptTemplate.promptMessages.length) {
+        const humanPrompt = chatPromptTemplate.promptMessages[chatPromptTemplate.promptMessages.length - 1]
+        const messages = [
+            ...chatPromptTemplate.promptMessages.slice(0, -1),
+            new MessagesPlaceholder(memoryKey),
+            humanPrompt,
+            new MessagesPlaceholder('agent_scratchpad')
+        ]
+        prompt = ChatPromptTemplate.fromMessages(messages)
+        if ((chatPromptTemplate as any).promptValues) {
+            const promptValuesRaw = (chatPromptTemplate as any).promptValues
+            const promptValues = handleEscapeCharacters(promptValuesRaw, true)
+            for (const val in promptValues) {
+                promptVariables = {
+                    ...promptVariables,
+                    [val]: () => {
+                        return promptValues[val]
+                    }
+                }
+            }
+        }
+    }
 
     if (llmSupportsVision(model)) {
         const visionChatModel = model as IVisionChatModal
@@ -267,7 +300,8 @@ const prepareAgent = async (
             },
             ['human_msg']: async (i: { input: string; steps: ToolsAgentStep[] }) => {
                 return new HumanMessage({ content: i.input, name: memory.humanPrefix })
-            }
+            },
+            ...promptVariables
         },
         prompt,
 

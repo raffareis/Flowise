@@ -100,7 +100,7 @@ class CustomTool_Tools implements INode {
 
             const variables = await getVars(appDataSource, databaseEntities, nodeData)
 
-            const flow = { chatflowId: options.chatflowid }
+            const flow = { ...nodeData.inputs, chatflowId: options.chatflowid }
 
             let dynamicStructuredTool = new DynamicStructuredTool(obj)
             dynamicStructuredTool.setVariables(variables)
