@@ -229,11 +229,11 @@ const prepareAgent = async (
     let promptVariables = {}
     const chatPromptTemplate = nodeData.inputs?.chatPromptTemplate as ChatPromptTemplate
     if (chatPromptTemplate && chatPromptTemplate.promptMessages.length) {
-        const humanPrompt = chatPromptTemplate.promptMessages[chatPromptTemplate.promptMessages.length - 1]
+        //const humanPrompt = chatPromptTemplate.promptMessages[chatPromptTemplate.promptMessages.length - 1] // (Raffa: Needed this to get the name in the human message to work)
         const messages = [
             ...chatPromptTemplate.promptMessages.slice(0, -1),
             new MessagesPlaceholder(memoryKey),
-            humanPrompt,
+            new MessagesPlaceholder('human_message'),
             new MessagesPlaceholder('agent_scratchpad')
         ]
         prompt = ChatPromptTemplate.fromMessages(messages)
