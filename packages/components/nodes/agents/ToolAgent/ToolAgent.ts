@@ -222,19 +222,18 @@ const prepareAgent = async (
     let prompt = ChatPromptTemplate.fromMessages([
         ['system', systemMessage],
         new MessagesPlaceholder(memoryKey),
-        //HumanMessagePromptTemplate.fromTemplate(`{${inputKey}}`, { name: memory.humanPrefix }), //Essa joça não funciona, não manda o "name" pra frente
-        new MessagesPlaceholder('human_msg'),
+        new MessagesPlaceholder('human_message'),
         new MessagesPlaceholder('agent_scratchpad')
     ])
 
     let promptVariables = {}
     const chatPromptTemplate = nodeData.inputs?.chatPromptTemplate as ChatPromptTemplate
     if (chatPromptTemplate && chatPromptTemplate.promptMessages.length) {
-        const humanPrompt = chatPromptTemplate.promptMessages[chatPromptTemplate.promptMessages.length - 1]
+        //const humanPrompt = chatPromptTemplate.promptMessages[chatPromptTemplate.promptMessages.length - 1] // (Raffa: Needed this to get the name in the human message to work)
         const messages = [
             ...chatPromptTemplate.promptMessages.slice(0, -1),
             new MessagesPlaceholder(memoryKey),
-            humanPrompt,
+            new MessagesPlaceholder('human_message'),
             new MessagesPlaceholder('agent_scratchpad')
         ]
         prompt = ChatPromptTemplate.fromMessages(messages)
@@ -298,7 +297,7 @@ const prepareAgent = async (
                 const messages = (await memory.getChatMessages(flowObj?.sessionId, true, prependMessages)) as BaseMessage[]
                 return messages ?? []
             },
-            ['human_msg']: async (i: { input: string; steps: ToolsAgentStep[] }) => {
+            ['human_message']: async (i: { input: string; steps: ToolsAgentStep[] }) => {
                 return new HumanMessage({ content: i.input, name: memory.humanPrefix })
             },
             ...promptVariables

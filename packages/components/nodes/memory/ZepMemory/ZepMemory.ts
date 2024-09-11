@@ -1,6 +1,6 @@
 import { ZepMemory, ZepMemoryInput } from '@langchain/community/memory/zep'
-import { BaseMessage } from '@langchain/core/messages'
-import { InputValues, MemoryVariables, OutputValues, getBufferString } from 'langchain/memory'
+import { AIMessage, BaseMessage, HumanMessage, SystemMessage, getBufferString } from '@langchain/core/messages'
+import { InputValues, MemoryVariables, OutputValues } from 'langchain/memory'
 import { IMessage, INode, INodeData, INodeParams, MemoryMethods, MessageType, ICommonObject } from '../../../src/Interface'
 import {
     convertBaseMessagetoIMessage,
@@ -10,7 +10,6 @@ import {
     mapChatMessageToBaseMessage
 } from '../../../src/utils'
 import { Memory, NotFoundError } from '@getzep/zep-js'
-import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages'
 
 class ZepMemory_Memory implements INode {
     label: string
@@ -27,7 +26,7 @@ class ZepMemory_Memory implements INode {
     constructor() {
         this.label = 'Zep Memory - Open Source'
         this.name = 'ZepMemory'
-        this.version = 2.01
+        this.version = 2.11
         this.type = 'ZepMemory'
         this.icon = 'zep.svg'
         this.category = 'Memory'
@@ -71,6 +70,7 @@ class ZepMemory_Memory implements INode {
                 name: 'aiPrefix',
                 type: 'string',
                 default: 'ai',
+                description: 'This will be the "role" / "name" of the AI in the memory.',
                 additionalParams: true
             },
             {
@@ -78,6 +78,7 @@ class ZepMemory_Memory implements INode {
                 name: 'humanPrefix',
                 type: 'string',
                 default: 'human',
+                description: 'This will be the "role" / "name" of the human user in the memory.',
                 additionalParams: true
             },
             {
@@ -152,7 +153,7 @@ class ZepMemoryExtended extends ZepMemory implements MemoryMethods {
         if (overrideSessionId) {
             this.sessionId = overrideSessionId
         }
-        // Wait for ZepClient to be initialized
+        // (raffareis) Pulled this straight from Base class, just changed the if (role === this.aiPrefix) check because it threw an exception when there were multiple names in the same session. https://github.com/langchain-ai/langchainjs/blob/main/libs/langchain-community/src/memory/zep.ts
         const zepClient = await this.zepClientPromise
         if (!zepClient) {
             throw new Error('ZepClient not initialized')

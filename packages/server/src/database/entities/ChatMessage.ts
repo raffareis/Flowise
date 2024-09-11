@@ -10,7 +10,7 @@ export class ChatMessage implements IChatMessage {
     @Column()
     role: MessageType
 
-    @Column()
+    @Column({ nullable: true, type: 'text' })
     name?: string
 
     @Index()
