@@ -222,8 +222,7 @@ const prepareAgent = async (
     let prompt = ChatPromptTemplate.fromMessages([
         ['system', systemMessage],
         new MessagesPlaceholder(memoryKey),
-        //HumanMessagePromptTemplate.fromTemplate(`{${inputKey}}`, { name: memory.humanPrefix }), //Essa joça não funciona, não manda o "name" pra frente
-        new MessagesPlaceholder('human_msg'),
+        new MessagesPlaceholder('human_message'),
         new MessagesPlaceholder('agent_scratchpad')
     ])
 
@@ -298,7 +297,7 @@ const prepareAgent = async (
                 const messages = (await memory.getChatMessages(flowObj?.sessionId, true, prependMessages)) as BaseMessage[]
                 return messages ?? []
             },
-            ['human_msg']: async (i: { input: string; steps: ToolsAgentStep[] }) => {
+            ['human_message']: async (i: { input: string; steps: ToolsAgentStep[] }) => {
                 return new HumanMessage({ content: i.input, name: memory.humanPrefix })
             },
             ...promptVariables
