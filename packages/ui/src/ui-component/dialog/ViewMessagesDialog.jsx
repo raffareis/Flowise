@@ -199,6 +199,7 @@ const ViewMessagesDialog = ({ show, dialogProps, onCancel }) => {
             const msg = {
                 content: chatmsg.content,
                 role: chatmsg.role === 'apiMessage' ? 'bot' : 'user',
+                name: chatmsg.name,
                 time: chatmsg.createdDate
             }
             if (filePaths.length) msg.filePaths = filePaths
@@ -335,7 +336,8 @@ const ViewMessagesDialog = ({ show, dialogProps, onCancel }) => {
             const obj = {
                 ...chatmsg,
                 message: chatmsg.content,
-                type: chatmsg.role
+                type: chatmsg.role,
+                name: chatmsg.name
             }
             if (chatmsg.sourceDocuments) obj.sourceDocuments = chatmsg.sourceDocuments
             if (chatmsg.usedTools) obj.usedTools = chatmsg.usedTools

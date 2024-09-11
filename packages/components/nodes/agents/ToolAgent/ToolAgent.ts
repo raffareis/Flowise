@@ -1,6 +1,6 @@
 import { flatten } from 'lodash'
 import { Tool } from '@langchain/core/tools'
-import { BaseMessage } from '@langchain/core/messages'
+import { BaseMessage, HumanMessage } from '@langchain/core/messages'
 import { ChainValues } from '@langchain/core/utils/types'
 import { RunnableSequence } from '@langchain/core/runnables'
 import { BaseChatModel } from '@langchain/core/language_models/chat_models'
@@ -175,11 +175,13 @@ class ToolAgent_Agents implements INode {
             [
                 {
                     text: input,
-                    type: 'userMessage'
+                    type: 'userMessage',
+                    name: memory.humanPrefix
                 },
                 {
                     text: output,
-                    type: 'apiMessage'
+                    type: 'apiMessage',
+                    name: memory.aiPrefix
                 }
             ],
             this.sessionId
@@ -220,7 +222,8 @@ const prepareAgent = async (
     let prompt = ChatPromptTemplate.fromMessages([
         ['system', systemMessage],
         new MessagesPlaceholder(memoryKey),
-        ['human', `{${inputKey}}`],
+        //HumanMessagePromptTemplate.fromTemplate(`{${inputKey}}`, { name: memory.humanPrefix }), //Essa joça não funciona, não manda o "name" pra frente
+        new MessagesPlaceholder('human_msg'),
         new MessagesPlaceholder('agent_scratchpad')
     ])
 
@@ -261,12 +264,15 @@ const prepareAgent = async (
             if (prompt.promptMessages.at(-1) instanceof HumanMessagePromptTemplate) {
                 const lastMessage = prompt.promptMessages.pop() as HumanMessagePromptTemplate
                 const template = (lastMessage.prompt as PromptTemplate).template as string
-                const msg = HumanMessagePromptTemplate.fromTemplate([
-                    ...messageContent,
-                    {
-                        text: template
-                    }
-                ])
+                const msg = HumanMessagePromptTemplate.fromTemplate(
+                    [
+                        ...messageContent,
+                        {
+                            text: template
+                        }
+                    ],
+                    { name: memory.humanPrefix }
+                )
                 msg.inputVariables = lastMessage.inputVariables
                 prompt.promptMessages.push(msg)
             }
@@ -292,9 +298,13 @@ const prepareAgent = async (
                 const messages = (await memory.getChatMessages(flowObj?.sessionId, true, prependMessages)) as BaseMessage[]
                 return messages ?? []
             },
+            ['human_msg']: async (i: { input: string; steps: ToolsAgentStep[] }) => {
+                return new HumanMessage({ content: i.input, name: memory.humanPrefix })
+            },
             ...promptVariables
         },
         prompt,
+
         modelWithTools,
         new ToolCallingAgentOutputParser()
     ])

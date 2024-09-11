@@ -180,7 +180,7 @@ class ZepMemoryExtended extends ZepMemory implements MemoryMethods {
                     const { content, role } = message
 
                     if (role === this.aiPrefix) {
-                        return new AIMessage(content)
+                        return new AIMessage({ content, name: role })
                     } else {
                         return new HumanMessage({ content, name: role })
                     }
@@ -227,11 +227,11 @@ class ZepMemoryExtended extends ZepMemory implements MemoryMethods {
         return returnBaseMessages ? baseMessages : convertBaseMessagetoIMessage(baseMessages)
     }
 
-    async addChatMessages(msgArray: { text: string; type: MessageType }[], overrideSessionId = ''): Promise<void> {
+    async addChatMessages(msgArray: { text: string; type: MessageType; name?: string }[], overrideSessionId = ''): Promise<void> {
         const id = overrideSessionId ? overrideSessionId : this.sessionId
         const input = msgArray.find((msg) => msg.type === 'userMessage')
         const output = msgArray.find((msg) => msg.type === 'apiMessage')
-        const inputValues = { [this.inputKey ?? 'input']: input?.text }
+        const inputValues = { [this.inputKey ?? 'input']: input?.text, name: input?.name ?? this.humanPrefix }
         const outputValues = { output: output?.text }
 
         await this.saveContext(inputValues, outputValues, id)
