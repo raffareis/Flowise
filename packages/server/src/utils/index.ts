@@ -1,7 +1,6 @@
 import path from 'path'
 import fs from 'fs'
 import logger from './logger'
-import { Server } from 'socket.io'
 import {
     IComponentCredentials,
     IComponentNodes,
@@ -39,6 +38,7 @@ import { ChatMessage } from '../database/entities/ChatMessage'
 import { Credential } from '../database/entities/Credential'
 import { Tool } from '../database/entities/Tool'
 import { Assistant } from '../database/entities/Assistant'
+import { Lead } from '../database/entities/Lead'
 import { DataSource } from 'typeorm'
 import { CachePool } from '../CachePool'
 import { Variable } from '../database/entities/Variable'
@@ -56,6 +56,7 @@ export const databaseEntities: IDatabaseEntity = {
     ChatMessage: ChatMessage,
     Tool: Tool,
     Credential: Credential,
+    Lead: Lead,
     Assistant: Assistant,
     Variable: Variable,
     DocumentStore: DocumentStore,
@@ -436,8 +437,6 @@ type BuildFlowParams = {
     stopNodeId?: string
     uploads?: IFileUpload[]
     baseURL?: string
-    socketIO?: Server
-    socketIOClientId?: string
 }
 
 /**
@@ -462,9 +461,7 @@ export const buildFlow = async ({
     isUpsert,
     stopNodeId,
     uploads,
-    baseURL,
-    socketIO,
-    socketIOClientId
+    baseURL
 }: BuildFlowParams) => {
     const flowNodes = cloneDeep(reactFlowNodes)
 
@@ -534,9 +531,7 @@ export const buildFlow = async ({
                     cachePool,
                     dynamicVariables,
                     uploads,
-                    baseURL,
-                    socketIO,
-                    socketIOClientId
+                    baseURL
                 })
                 if (indexResult) upsertHistory['result'] = indexResult
                 logger.debug(`[server]: Finished upserting ${reactFlowNode.data.label} (${reactFlowNode.data.id})`)
@@ -562,8 +557,6 @@ export const buildFlow = async ({
                     dynamicVariables,
                     uploads,
                     baseURL,
-                    socketIO,
-                    socketIOClientId,
                     componentNodes: componentNodes as ICommonObject
                 })
 
@@ -1206,6 +1199,7 @@ export const isFlowValidForStream = (reactFlowNodes: IReactFlowNode[], endingNod
             'azureChatOpenAI',
             'chatOpenAI',
             'chatOpenAI_LlamaIndex',
+            'chatOpenAICustom',
             'chatAnthropic',
             'chatAnthropic_LlamaIndex',
             'chatOllama',

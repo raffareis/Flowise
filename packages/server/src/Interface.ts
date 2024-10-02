@@ -43,6 +43,7 @@ export interface IChatMessage {
     fileAnnotations?: string
     agentReasoning?: string
     fileUploads?: string
+    artifacts?: string
     chatType: string
     chatId: string
     memoryType?: string
@@ -216,7 +217,6 @@ export interface IMessage {
 export interface IncomingInput {
     question: string
     overrideConfig?: ICommonObject
-    socketIOClientId?: string
     chatId?: string
     stopNodeId?: string
     uploads?: IFileUpload[]
@@ -272,6 +272,19 @@ export interface IApiKey {
     apiKey: string
     apiSecret: string
     updatedDate: Date
+}
+
+export interface ICustomTemplate {
+    id: string
+    name: string
+    flowData: string
+    updatedDate: Date
+    createdDate: Date
+    description?: string
+    type?: string
+    badge?: string
+    framework?: string
+    usecases?: string
 }
 
 // DocumentStore related
