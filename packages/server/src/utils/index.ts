@@ -2,6 +2,7 @@ import path from 'path'
 import fs from 'fs'
 import logger from './logger'
 import {
+    IChatFlow,
     IComponentCredentials,
     IComponentNodes,
     ICredentialDataDecrypted,
@@ -48,6 +49,7 @@ import { InternalFlowiseError } from '../errors/internalFlowiseError'
 import { StatusCodes } from 'http-status-codes'
 
 const QUESTION_VAR_PREFIX = 'question'
+const FILE_ATTACHMENT_PREFIX = 'file_attachment'
 const CHAT_HISTORY_VAR_PREFIX = 'chat_history'
 const REDACTED_CREDENTIAL_VALUE = '_FLOWISE_BLANK_07167752-1a71-43b1-bf8f-4f32252165db'
 
@@ -430,13 +432,18 @@ type BuildFlowParams = {
     chatId: string
     sessionId: string
     chatflowid: string
+    apiMessageId: string
     appDataSource: DataSource
     overrideConfig?: ICommonObject
+    apiOverrideStatus?: boolean
+    nodeOverrides?: ICommonObject
+    variableOverrides?: ICommonObject[]
     cachePool?: CachePool
     isUpsert?: boolean
     stopNodeId?: string
     uploads?: IFileUpload[]
     baseURL?: string
+    uploadedFilesContent?: string
 }
 
 /**
@@ -451,12 +458,17 @@ export const buildFlow = async ({
     depthQueue,
     componentNodes,
     question,
+    uploadedFilesContent,
     chatHistory,
+    apiMessageId,
     chatId,
     sessionId,
     chatflowid,
     appDataSource,
     overrideConfig,
+    apiOverrideStatus = false,
+    nodeOverrides = {},
+    variableOverrides = [],
     cachePool,
     isUpsert,
     stopNodeId,
@@ -505,7 +517,10 @@ export const buildFlow = async ({
 
             let flowNodeData = cloneDeep(reactFlowNode.data)
 
-            if (overrideConfig) flowNodeData = replaceInputsWithConfig(flowNodeData, overrideConfig)
+            // Only override the config if its status is true
+            if (overrideConfig && apiOverrideStatus) {
+                flowNodeData = replaceInputsWithConfig(flowNodeData, overrideConfig, nodeOverrides)
+            }
 
             if (isUpsert) upsertHistory['flowData'] = saveUpsertFlowData(flowNodeData, upsertHistory)
 
@@ -515,7 +530,9 @@ export const buildFlow = async ({
                 flowNodes,
                 question,
                 chatHistory,
-                flowData
+                flowData,
+                uploadedFilesContent,
+                variableOverrides
             )
 
             if (isUpsert && stopNodeId && nodeId === stopNodeId) {
@@ -525,6 +542,7 @@ export const buildFlow = async ({
                     sessionId,
                     chatflowid,
                     chatHistory,
+                    apiMessageId,
                     logger,
                     appDataSource,
                     databaseEntities,
@@ -544,7 +562,8 @@ export const buildFlow = async ({
                 initializedNodes.add(nodeId)
             } else {
                 logger.debug(`[server]: Initializing ${reactFlowNode.data.label} (${reactFlowNode.data.id})`)
-                let outputResult = await newNodeInstance.init(reactFlowNodeData, question, {
+                const finalQuestion = uploadedFilesContent ? `${uploadedFilesContent}\n\n${question}` : question
+                let outputResult = await newNodeInstance.init(reactFlowNodeData, finalQuestion, {
                     chatId,
                     sessionId,
                     chatflowid,
@@ -706,13 +725,19 @@ export const clearSessionMemory = async (
     }
 }
 
-const getGlobalVariable = async (appDataSource: DataSource, overrideConfig?: ICommonObject) => {
+const getGlobalVariable = async (appDataSource: DataSource, overrideConfig?: ICommonObject, variableOverrides?: ICommonObject[]) => {
     const variables = await appDataSource.getRepository(Variable).find()
 
     // override variables defined in overrideConfig
     // nodeData.inputs.vars is an Object, check each property and override the variable
-    if (overrideConfig?.vars) {
+    if (overrideConfig?.vars && variableOverrides) {
         for (const propertyName of Object.getOwnPropertyNames(overrideConfig.vars)) {
+            // Check if this variable is enabled for override
+            const override = variableOverrides.find((v) => v.name === propertyName)
+            if (!override?.enabled) {
+                continue // Skip this variable if it's not enabled for override
+            }
+
             const foundVar = variables.find((v) => v.name === propertyName)
             if (foundVar) {
                 // even if the variable was defined as runtime, we override it with static value
@@ -768,7 +793,9 @@ export const getVariableValue = async (
     question: string,
     chatHistory: IMessage[],
     isAcceptVariable = false,
-    flowData?: ICommonObject
+    flowData?: ICommonObject,
+    uploadedFilesContent?: string,
+    variableOverrides: ICommonObject[] = []
 ) => {
     const isObject = typeof paramValue === 'object'
     const initialValue = (isObject ? JSON.stringify(paramValue) : paramValue) ?? ''
@@ -801,12 +828,16 @@ export const getVariableValue = async (
                 variableDict[`{{${variableFullPath}}}`] = handleEscapeCharacters(question, false)
             }
 
+            if (isAcceptVariable && variableFullPath === FILE_ATTACHMENT_PREFIX) {
+                variableDict[`{{${variableFullPath}}}`] = handleEscapeCharacters(uploadedFilesContent, false)
+            }
+
             if (isAcceptVariable && variableFullPath === CHAT_HISTORY_VAR_PREFIX) {
                 variableDict[`{{${variableFullPath}}}`] = handleEscapeCharacters(convertChatHistoryToText(chatHistory), false)
             }
 
             if (variableFullPath.startsWith('$vars.')) {
-                const vars = await getGlobalVariable(appDataSource, flowData)
+                const vars = await getGlobalVariable(appDataSource, flowData, variableOverrides)
                 const variableValue = get(vars, variableFullPath.replace('$vars.', ''))
                 if (variableValue) {
                     variableDict[`{{${variableFullPath}}}`] = variableValue
@@ -914,7 +945,9 @@ export const resolveVariables = async (
     reactFlowNodes: IReactFlowNode[],
     question: string,
     chatHistory: IMessage[],
-    flowData?: ICommonObject
+    flowData?: ICommonObject,
+    uploadedFilesContent?: string,
+    variableOverrides: ICommonObject[] = []
 ): Promise<INodeData> => {
     let flowNodeData = cloneDeep(reactFlowNodeData)
     const types = 'inputs'
@@ -932,7 +965,9 @@ export const resolveVariables = async (
                         question,
                         chatHistory,
                         undefined,
-                        flowData
+                        flowData,
+                        uploadedFilesContent,
+                        variableOverrides
                     )
                     resolvedInstances.push(resolvedInstance)
                 }
@@ -946,7 +981,9 @@ export const resolveVariables = async (
                     question,
                     chatHistory,
                     isAcceptVariable,
-                    flowData
+                    flowData,
+                    uploadedFilesContent,
+                    variableOverrides
                 )
                 paramsObj[key] = resolvedInstance
             }
@@ -963,10 +1000,17 @@ export const resolveVariables = async (
  * Loop through each inputs and replace their value with override config values
  * @param {INodeData} flowNodeData
  * @param {ICommonObject} overrideConfig
+ * @param {ICommonObject} nodeOverrides
  * @returns {INodeData}
  */
-export const replaceInputsWithConfig = (flowNodeData: INodeData, overrideConfig: ICommonObject) => {
+export const replaceInputsWithConfig = (flowNodeData: INodeData, overrideConfig: ICommonObject, nodeOverrides: ICommonObject) => {
     const types = 'inputs'
+
+    const isParameterEnabled = (nodeType: string, paramName: string): boolean => {
+        if (!nodeOverrides[nodeType]) return false
+        const parameter = nodeOverrides[nodeType].find((param: any) => param.name === paramName)
+        return parameter?.enabled ?? false
+    }
 
     const getParamValues = (inputsObj: ICommonObject) => {
         for (const config in overrideConfig) {
@@ -974,7 +1018,10 @@ export const replaceInputsWithConfig = (flowNodeData: INodeData, overrideConfig:
             if (overrideConfig[config] && typeof overrideConfig[config] === 'object') {
                 const nodeIds = Object.keys(overrideConfig[config])
                 if (nodeIds.includes(flowNodeData.id)) {
-                    inputsObj[config] = overrideConfig[config][flowNodeData.id]
+                    // Check if this parameter is enabled for this node type
+                    if (isParameterEnabled(flowNodeData.label, config)) {
+                        inputsObj[config] = overrideConfig[config][flowNodeData.id]
+                    }
                     continue
                 } else if (nodeIds.some((nodeId) => nodeId.includes(flowNodeData.name))) {
                     /*
@@ -984,6 +1031,11 @@ export const replaceInputsWithConfig = (flowNodeData: INodeData, overrideConfig:
                      */
                     continue
                 }
+            }
+
+            // Only proceed if the parameter is enabled for this node type
+            if (!isParameterEnabled(flowNodeData.label, config)) {
+                continue
             }
 
             let paramValue = inputsObj[config]
@@ -1207,6 +1259,7 @@ export const isFlowValidForStream = (reactFlowNodes: IReactFlowNode[], endingNod
             'awsChatBedrock',
             'chatMistralAI',
             'chatMistral_LlamaIndex',
+            'chatAlibabaTongyi',
             'groqChat',
             'chatGroq_LlamaIndex',
             'chatCohere',
@@ -1582,4 +1635,32 @@ export const convertToValidFilename = (word: string) => {
         .replace(/[/|\\:*?"<>]/g, ' ')
         .replace(' ', '')
         .toLowerCase()
+}
+
+export const setDateToStartOrEndOfDay = (dateTimeStr: string, setHours: 'start' | 'end') => {
+    const date = new Date(dateTimeStr)
+    if (isNaN(date.getTime())) {
+        return undefined
+    }
+    setHours === 'start' ? date.setHours(0, 0, 0, 0) : date.setHours(23, 59, 59, 999)
+    return date
+}
+
+export const aMonthAgo = () => {
+    const date = new Date()
+    date.setMonth(new Date().getMonth() - 1)
+    return date
+}
+
+export const getAPIOverrideConfig = (chatflow: IChatFlow) => {
+    try {
+        const apiConfig = chatflow.apiConfig ? JSON.parse(chatflow.apiConfig) : {}
+        const nodeOverrides = apiConfig.overrideConfig && apiConfig.overrideConfig.nodes ? apiConfig.overrideConfig.nodes : {}
+        const variableOverrides = apiConfig.overrideConfig && apiConfig.overrideConfig.variables ? apiConfig.overrideConfig.variables : []
+        const apiOverrideStatus = apiConfig.overrideConfig && apiConfig.overrideConfig.status ? apiConfig.overrideConfig.status : false
+
+        return { nodeOverrides, variableOverrides, apiOverrideStatus }
+    } catch (error) {
+        return { nodeOverrides: {}, variableOverrides: [], apiOverrideStatus: false }
+    }
 }
