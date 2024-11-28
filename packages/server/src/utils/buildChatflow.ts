@@ -218,7 +218,7 @@ export const utilBuildChatflow = async (req: Request, isInternal: boolean = fals
 
         /*** Get session ID ***/
         const memoryNode = findMemoryNode(nodes, edges)
-        const memoryType = memoryNode?.data.label
+        const memoryType = memoryNode?.data?.label
         let sessionId = getMemorySessionId(memoryNode, incomingInput, chatId, isInternal)
 
         /*** Get Ending Node with Directed Graph  ***/
@@ -248,6 +248,8 @@ export const utilBuildChatflow = async (req: Request, isInternal: boolean = fals
 
         // Get prepend messages
         const prependMessages = incomingInput.history
+
+        const flowVariables = {} as Record<string, unknown>
 
         /*   Reuse the flow without having to rebuild (to avoid duplicated upsert, recomputation, reinitialization of memory) when all these conditions met:
          * - Reuse of flows is not disabled
@@ -378,6 +380,18 @@ export const utilBuildChatflow = async (req: Request, isInternal: boolean = fals
                 baseURL
             })
 
+            // Show output of setVariable nodes in the response
+            for (const node of reactFlowNodes) {
+                if (
+                    node.data.name === 'setVariable' &&
+                    (node.data.inputs?.showOutput === true || node.data.inputs?.showOutput === 'true')
+                ) {
+                    const outputResult = node.data.instance
+                    const variableKey = node.data.inputs?.variableName
+                    flowVariables[variableKey] = outputResult
+                }
+            }
+
             const nodeToExecute =
                 endingNodeIds.length === 1
                     ? reactFlowNodes.find((node: IReactFlowNode) => endingNodeIds[0] === node.id)
@@ -388,7 +402,12 @@ export const utilBuildChatflow = async (req: Request, isInternal: boolean = fals
 
             // Only override the config if its status is true
             if (incomingInput.overrideConfig && apiOverrideStatus) {
-                nodeToExecute.data = replaceInputsWithConfig(nodeToExecute.data, incomingInput.overrideConfig, nodeOverrides)
+                nodeToExecute.data = replaceInputsWithConfig(
+                    nodeToExecute.data,
+                    incomingInput.overrideConfig,
+                    nodeOverrides,
+                    variableOverrides
+                )
             }
 
             const flowData: ICommonObject = {
@@ -522,6 +541,7 @@ export const utilBuildChatflow = async (req: Request, isInternal: boolean = fals
 
         if (sessionId) result.sessionId = sessionId
         if (memoryType) result.memoryType = memoryType
+        if (Object.keys(flowVariables).length) result.flowVariables = flowVariables
 
         return result
     } catch (e) {
