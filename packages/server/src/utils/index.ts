@@ -767,11 +767,12 @@ const getGlobalVariable = async (
 ) => {
     // override variables defined in overrideConfig
     // nodeData.inputs.vars is an Object, check each property and override the variable
-    if (overrideConfig?.vars && variableOverrides) {
+    const skipSecurity = process.env.FLOWISE_DISABLE_OVERRIDE_SECURITY === 'true'
+    if (overrideConfig?.vars && (variableOverrides ?? skipSecurity)) {
         for (const propertyName of Object.getOwnPropertyNames(overrideConfig.vars)) {
             // Check if this variable is enabled for override
             const override = variableOverrides.find((v) => v.name === propertyName)
-            if (!override?.enabled) {
+            if (!override?.enabled && !skipSecurity) {
                 continue // Skip this variable if it's not enabled for override
             }
 
@@ -1048,8 +1049,10 @@ export const replaceInputsWithConfig = (
     variableOverrides: IVariableOverride[]
 ) => {
     const types = 'inputs'
+    const skipSecurity = process.env.FLOWISE_DISABLE_OVERRIDE_SECURITY === 'true'
 
     const isParameterEnabled = (nodeType: string, paramName: string): boolean => {
+        if (skipSecurity) return true
         if (!nodeOverrides[nodeType]) return false
         const parameter = nodeOverrides[nodeType].find((param: any) => param.name === paramName)
         return parameter?.enabled ?? false
@@ -1080,7 +1083,7 @@ export const replaceInputsWithConfig = (
                     const vars = overrideConfig[config]
                     for (const variable in vars) {
                         const override = variableOverrides.find((v) => v.name === variable)
-                        if (!override?.enabled) {
+                        if (!override?.enabled && !skipSecurity) {
                             continue // Skip this variable if it's not enabled for override
                         }
                         filteredVars[variable] = vars[variable]
@@ -1764,13 +1767,14 @@ export const aMonthAgo = () => {
 
 export const getAPIOverrideConfig = (chatflow: IChatFlow) => {
     try {
+        const skipSecurity = process.env.FLOWISE_DISABLE_OVERRIDE_SECURITY === 'true'
         const apiConfig = chatflow.apiConfig ? JSON.parse(chatflow.apiConfig) : {}
         const nodeOverrides: INodeOverrides =
             apiConfig.overrideConfig && apiConfig.overrideConfig.nodes ? apiConfig.overrideConfig.nodes : {}
         const variableOverrides: IVariableOverride[] =
             apiConfig.overrideConfig && apiConfig.overrideConfig.variables ? apiConfig.overrideConfig.variables : []
         const apiOverrideStatus: boolean =
-            apiConfig.overrideConfig && apiConfig.overrideConfig.status ? apiConfig.overrideConfig.status : false
+            apiConfig.overrideConfig && apiConfig.overrideConfig.status ? apiConfig.overrideConfig.status : skipSecurity
 
         return { nodeOverrides, variableOverrides, apiOverrideStatus }
     } catch (error) {

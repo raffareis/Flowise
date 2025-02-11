@@ -313,7 +313,7 @@ export const executeFlow = async ({
             }
         }
     }
-    
+
     // Process form data body with files
     if (files?.length) {
         overrideConfig = { ...incomingInput }
@@ -627,6 +627,7 @@ export const executeFlow = async ({
         const userMessage: Omit<IChatMessage, 'id'> = {
             role: 'userMessage',
             content: question,
+            name: incomingInput.overrideConfig?.humanPrefix ?? memoryNode?.data?.inputs?.humanPrefix,
             chatflowid,
             chatType: isInternal ? ChatType.INTERNAL : ChatType.EXTERNAL,
             chatId,
@@ -647,6 +648,7 @@ export const executeFlow = async ({
             id: apiMessageId,
             role: 'apiMessage',
             content: resultText,
+            name: incomingInput.overrideConfig?.aiPrefix ?? memoryNode?.data?.inputs?.aiPrefix,
             chatflowid,
             chatType: isInternal ? ChatType.INTERNAL : ChatType.EXTERNAL,
             chatId,
