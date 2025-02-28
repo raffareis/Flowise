@@ -28,7 +28,7 @@ class Airtable_Agents implements INode {
         this.type = 'AgentExecutor'
         this.category = 'Agents'
         this.icon = 'airtable.svg'
-        this.description = 'Agent used to to answer queries on Airtable table'
+        this.description = 'Agent used to answer queries on Airtable table'
         this.baseClasses = [this.type, ...getBaseClasses(AgentExecutor)]
         this.credential = {
             label: 'Connect Credential',
@@ -163,7 +163,7 @@ json.dumps(my_dict)`
             const chain = new LLMChain({
                 llm: model,
                 prompt: PromptTemplate.fromTemplate(systemPrompt),
-                verbose: process.env.DEBUG === 'true' ? true : false
+                verbose: process.env.DEBUG === 'true'
             })
             const inputs = {
                 dict: dataframeColDict,
@@ -192,7 +192,7 @@ json.dumps(my_dict)`
             const chain = new LLMChain({
                 llm: model,
                 prompt: PromptTemplate.fromTemplate(finalSystemPrompt),
-                verbose: process.env.DEBUG === 'true' ? true : false
+                verbose: process.env.DEBUG === 'true'
             })
             const inputs = {
                 question: input,

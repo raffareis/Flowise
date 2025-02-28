@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
-import { getRateLimiter } from '../../utils/rateLimit'
+import { RateLimiterManager } from '../../utils/rateLimit'
 import chatflowsService from '../../services/chatflows'
 import logger from '../../utils/logger'
 import predictionsServices from '../../services/predictions'
@@ -8,6 +8,7 @@ import { StatusCodes } from 'http-status-codes'
 import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
 import { v4 as uuidv4 } from 'uuid'
 import { getErrorMessage } from '../../errors/utils'
+import { MODE } from '../../Interface'
 
 // Send input message and get prediction result (External)
 const createPrediction = async (req: Request, res: Response, next: NextFunction) => {
@@ -29,11 +30,13 @@ const createPrediction = async (req: Request, res: Response, next: NextFunction)
             throw new InternalFlowiseError(StatusCodes.NOT_FOUND, `Chatflow ${req.params.id} not found`)
         }
         let isDomainAllowed = true
+        let unauthorizedOriginError = 'This site is not allowed to access this chatbot'
         logger.info(`[server]: Request originated from ${req.headers.origin || 'UNKNOWN ORIGIN'}`)
         if (chatflow.chatbotConfig) {
             const parsedConfig = JSON.parse(chatflow.chatbotConfig)
             // check whether the first one is not empty. if it is empty that means the user set a value and then removed it.
             const isValidAllowedOrigins = parsedConfig.allowedOrigins?.length && parsedConfig.allowedOrigins[0] !== ''
+            unauthorizedOriginError = parsedConfig.allowedOriginsError || 'This site is not allowed to access this chatbot'
             if (isValidAllowedOrigins && req.headers.origin) {
                 const originHeader = req.headers.origin
                 const origin = new URL(originHeader).host
@@ -53,6 +56,7 @@ const createPrediction = async (req: Request, res: Response, next: NextFunction)
             const isStreamingRequested = req.body.streaming === 'true' || req.body.streaming === true
             if (streamable?.isStreaming && isStreamingRequested) {
                 const sseStreamer = getRunningExpressApp().sseStreamer
+
                 let chatId = req.body.chatId
                 if (!req.body.chatId) {
                     chatId = req.body.chatId ?? req.body.overrideConfig?.sessionId ?? uuidv4()
@@ -65,6 +69,10 @@ const createPrediction = async (req: Request, res: Response, next: NextFunction)
                     res.setHeader('Connection', 'keep-alive')
                     res.setHeader('X-Accel-Buffering', 'no') //nginx config: https://serverfault.com/a/801629
                     res.flushHeaders()
+
+                    if (process.env.MODE === MODE.QUEUE) {
+                        getRunningExpressApp().redisSubscriber.subscribe(chatId)
+                    }
 
                     const apiResponse = await predictionsServices.buildChatflow(req)
                     sseStreamer.streamMetadataEvent(apiResponse.chatId, apiResponse)
@@ -81,7 +89,11 @@ const createPrediction = async (req: Request, res: Response, next: NextFunction)
                 return res.json(apiResponse)
             }
         } else {
-            throw new InternalFlowiseError(StatusCodes.UNAUTHORIZED, `This site is not allowed to access this chatbot`)
+            const isStreamingRequested = req.body.streaming === 'true' || req.body.streaming === true
+            if (isStreamingRequested) {
+                return res.status(StatusCodes.FORBIDDEN).send(unauthorizedOriginError)
+            }
+            throw new InternalFlowiseError(StatusCodes.FORBIDDEN, unauthorizedOriginError)
         }
     } catch (error) {
         next(error)
@@ -90,7 +102,7 @@ const createPrediction = async (req: Request, res: Response, next: NextFunction)
 
 const getRateLimiterMiddleware = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        return getRateLimiter(req, res, next)
+        return RateLimiterManager.getInstance().getRateLimiter()(req, res, next)
     } catch (error) {
         next(error)
     }
