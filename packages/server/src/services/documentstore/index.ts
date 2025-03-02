@@ -32,7 +32,8 @@ import {
     INodeData,
     MODE,
     IOverrideConfig,
-    IExecutePreviewLoader
+    IExecutePreviewLoader,
+    DocumentStoreDTO
 } from '../../Interface'
 import { DocumentStoreFileChunk } from '../../database/entities/DocumentStoreFileChunk'
 import { v4 as uuidv4 } from 'uuid'
@@ -842,7 +843,7 @@ const _saveChunksToStorage = async (
                         filesWithMetadata.push(fileMetadata)
                     }
                 }
-                data.loaderConfig[keys[i]] = 'FILE-STORAGE::' + JSON.stringify(fileNames)
+                if (fileNames.length) data.loaderConfig[keys[i]] = 'FILE-STORAGE::' + JSON.stringify(fileNames)
             } else if (re.test(input)) {
                 const fileNames: string[] = []
                 const fileMetadata = await _saveFileToStorage(input, entity)
@@ -1464,6 +1465,7 @@ const upsertDocStore = async (
         }
     }
     const replaceExisting = data.replaceExisting ?? false
+    const createNewDocStore = data.createNewDocStore ?? false
     const newLoader = typeof data.loader === 'string' ? JSON.parse(data.loader) : data.loader
     const newSplitter = typeof data.splitter === 'string' ? JSON.parse(data.splitter) : data.splitter
     const newVectorStore = typeof data.vectorStore === 'string' ? JSON.parse(data.vectorStore) : data.vectorStore
@@ -1531,6 +1533,15 @@ const upsertDocStore = async (
         // Record Manager
         recordManagerName = JSON.parse(entity.recordManagerConfig || '{}')?.name
         recordManagerConfig = JSON.parse(entity.recordManagerConfig || '{}')?.config
+    }
+
+    if (createNewDocStore) {
+        const docStoreBody = typeof data.docStore === 'string' ? JSON.parse(data.docStore) : data.docStore
+        const newDocumentStore = docStoreBody ?? { name: `Document Store ${Date.now().toString()}` }
+        const docStore = DocumentStoreDTO.toEntity(newDocumentStore)
+        const documentStore = appDataSource.getRepository(DocumentStore).create(docStore)
+        const dbResponse = await appDataSource.getRepository(DocumentStore).save(documentStore)
+        storeId = dbResponse.id
     }
 
     // Step 2: Replace with new values
@@ -1687,6 +1698,7 @@ const upsertDocStore = async (
             isVectorStoreInsert: true
         })
         res.docId = newDocId
+        if (createNewDocStore) res.storeId = storeId
 
         return res
     } catch (error) {
