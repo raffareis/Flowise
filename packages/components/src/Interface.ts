@@ -168,6 +168,7 @@ export interface IUsedTool {
     toolInput: object
     toolOutput: string | object
     sourceDocuments?: ICommonObject[]
+    error?: string
 }
 
 export interface IMultiAgentNode {
