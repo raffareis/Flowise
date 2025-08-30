@@ -1,0 +1,51 @@
+# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
+# More GitHub Actions for Azure: https://github.com/Azure/actions
+
+name: Build and deploy to Redigir Azure - xm-flowise
+
+on:
+    push:
+        branches:
+            - xmacna-mig-azure
+    workflow_dispatch:
+
+jobs:
+    build:
+        runs-on: 'ubuntu-latest'
+
+        steps:
+            - uses: actions/checkout@v3
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v2
+
+            - name: Log in to Redigir ACR
+              uses: docker/login-action@v2
+              with:
+                  registry: https://xmacnacontainers.azurecr.io/
+                  username: ${{ secrets.AZURE_ACR_USERNAME }}
+                  password: ${{ secrets.AZURE_ACR_PASSWORD }}
+
+            - name: Build and push container image to Redigir ACR
+              uses: docker/build-push-action@v3
+              with:
+                  push: true
+                  tags: xmacnacontainers.azurecr.io/flowise:latest,xmacnacontainers.azurecr.io/flowise:${{ github.sha }}
+                  file: ./Dockerfile
+
+    deploy:
+        runs-on: ubuntu-latest
+        needs: build
+        environment:
+            name: 'production-redigir'
+            url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+
+        steps:
+            - name: Deploy to Azure Web App (Redigir)
+              id: deploy-to-webapp
+              uses: azure/webapps-deploy@v2
+              with:
+                  app-name: 'xm-flowise'
+                  slot-name: 'production'
+                  publish-profile: ${{ secrets.REDIGIR_FLOWISE_PUBLISH_PROFILE }}
+                  images: 'xmacnacontainers.azurecr.io/flowise:${{ github.sha }}'
