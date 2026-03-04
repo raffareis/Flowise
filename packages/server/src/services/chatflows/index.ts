@@ -1,6 +1,7 @@
 import { ICommonObject, removeFolderFromStorage } from 'flowise-components'
 import { StatusCodes } from 'http-status-codes'
 import { In } from 'typeorm'
+import { validate as isValidUUID } from 'uuid'
 import { ChatflowType, IReactFlowObject } from '../../Interface'
 import { FLOWISE_COUNTER_STATUS, FLOWISE_METRIC_COUNTERS } from '../../Interface.Metrics'
 import { UsageCacheManager } from '../../UsageCacheManager'
@@ -14,14 +15,17 @@ import { InternalFlowiseError } from '../../errors/internalFlowiseError'
 import { getErrorMessage } from '../../errors/utils'
 import documentStoreService from '../../services/documentstore'
 import { constructGraphs, getAppVersion, getEndingNodes, getTelemetryFlowObj, isFlowValidForStream } from '../../utils'
+import { sanitizeAllowedUploadMimeTypesFromConfig } from '../../utils/fileValidation'
 import { containsBase64File, updateFlowDataWithFilePaths } from '../../utils/fileRepository'
+import { sanitizeFlowDataForPublicEndpoint } from '../../utils/sanitizeFlowData'
 import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
 import { utilGetUploadsConfig } from '../../utils/getUploadsConfig'
 import logger from '../../utils/logger'
 import { updateStorageUsage } from '../../utils/quotaUsage'
 
 export const enum ChatflowErrorMessage {
-    INVALID_CHATFLOW_TYPE = 'Invalid Chatflow Type'
+    INVALID_CHATFLOW_TYPE = 'Invalid Chatflow Type',
+    INVALID_CHATFLOW_ID = 'Invalid Chatflow ID'
 }
 
 export function validateChatflowType(type: ChatflowType | undefined) {
@@ -105,6 +109,8 @@ const checkIfChatflowIsValidForUploads = async (chatflowId: string): Promise<any
 const deleteChatflow = async (chatflowId: string, orgId: string, workspaceId: string): Promise<any> => {
     try {
         const appServer = getRunningExpressApp()
+
+        await getChatflowById(chatflowId, workspaceId)
 
         const dbResponse = await appServer.AppDataSource.getRepository(ChatFlow).delete({ id: chatflowId })
 
@@ -238,17 +244,26 @@ const getChatflowByApiKey = async (apiKeyId: string, keyonly?: unknown): Promise
     }
 }
 
-const getChatflowById = async (chatflowId: string): Promise<any> => {
+const getChatflowById = async (chatflowId: string, workspaceId?: string): Promise<any> => {
     try {
+        if (!isValidUUID(chatflowId)) {
+            throw new InternalFlowiseError(StatusCodes.BAD_REQUEST, ChatflowErrorMessage.INVALID_CHATFLOW_ID)
+        }
         const appServer = getRunningExpressApp()
-        const dbResponse = await appServer.AppDataSource.getRepository(ChatFlow).findOneBy({
-            id: chatflowId
+        const dbResponse = await appServer.AppDataSource.getRepository(ChatFlow).findOne({
+            where: {
+                id: chatflowId,
+                ...(workspaceId ? { workspaceId } : {})
+            }
         })
         if (!dbResponse) {
             throw new InternalFlowiseError(StatusCodes.NOT_FOUND, `Chatflow ${chatflowId} not found in the database!`)
         }
         return dbResponse
     } catch (error) {
+        if (error instanceof InternalFlowiseError) {
+            throw error
+        }
         throw new InternalFlowiseError(
             StatusCodes.INTERNAL_SERVER_ERROR,
             `Error: chatflowsService.getChatflowById - ${getErrorMessage(error)}`
@@ -292,12 +307,17 @@ const saveChatflow = async (
         const chatflow = appServer.AppDataSource.getRepository(ChatFlow).create(newChatFlow)
         dbResponse = await appServer.AppDataSource.getRepository(ChatFlow).save(chatflow)
     }
+
+    const productId = await appServer.identityManager.getProductIdFromSubscription(subscriptionId)
+
     await appServer.telemetry.sendTelemetry(
         'chatflow_created',
         {
             version: await getAppVersion(),
             chatflowId: dbResponse.id,
-            flowGraph: getTelemetryFlowObj(JSON.parse(dbResponse.flowData)?.nodes, JSON.parse(dbResponse.flowData)?.edges)
+            flowGraph: getTelemetryFlowObj(JSON.parse(dbResponse.flowData)?.nodes, JSON.parse(dbResponse.flowData)?.edges),
+            productId,
+            subscriptionId
         },
         orgId
     )
@@ -333,6 +353,21 @@ const updateChatflow = async (
     } else {
         updateChatFlow.type = chatflow.type
     }
+    if (updateChatFlow.chatbotConfig) {
+        try {
+            const parsed = JSON.parse(updateChatFlow.chatbotConfig) as ICommonObject
+            if (parsed?.fullFileUpload?.allowedUploadFileTypes !== undefined) {
+                const current = parsed.fullFileUpload.allowedUploadFileTypes
+                const sanitized = sanitizeAllowedUploadMimeTypesFromConfig(typeof current === 'string' ? current : String(current ?? ''))
+                parsed.fullFileUpload.allowedUploadFileTypes = sanitized
+                updateChatFlow.chatbotConfig = JSON.stringify(parsed)
+            }
+        } catch (error) {
+            const message = getErrorMessage(error)
+            logger.error(`[server]: Invalid chatbotConfig JSON in updateChatflow: ${message}`)
+            throw new InternalFlowiseError(StatusCodes.BAD_REQUEST, `Invalid chatbotConfig: ${message}`)
+        }
+    }
     const newDbChatflow = appServer.AppDataSource.getRepository(ChatFlow).merge(chatflow, updateChatFlow)
     await _checkAndUpdateDocumentStoreUsage(newDbChatflow, chatflow.workspaceId)
     const dbResponse = await appServer.AppDataSource.getRepository(ChatFlow).save(newDbChatflow)
@@ -341,7 +376,7 @@ const updateChatflow = async (
 }
 
 // Get specific chatflow chatbotConfig via id (PUBLIC endpoint, used to retrieve config for embedded chat)
-// Safe as public endpoint as chatbotConfig doesn't contain sensitive credential
+// flowData is sanitized before returning — password, file, folder inputs and credential references are stripped
 const getSinglePublicChatbotConfig = async (chatflowId: string): Promise<any> => {
     try {
         const appServer = getRunningExpressApp()
@@ -357,7 +392,25 @@ const getSinglePublicChatbotConfig = async (chatflowId: string): Promise<any> =>
         if (dbResponse.chatbotConfig || uploadsConfig) {
             try {
                 const parsedConfig = dbResponse.chatbotConfig ? JSON.parse(dbResponse.chatbotConfig) : {}
-                return { ...parsedConfig, uploads: uploadsConfig, flowData: dbResponse.flowData }
+                const ttsConfig =
+                    typeof dbResponse.textToSpeech === 'string' ? JSON.parse(dbResponse.textToSpeech) : dbResponse.textToSpeech
+
+                let isTTSEnabled = false
+                if (ttsConfig) {
+                    Object.keys(ttsConfig).forEach((provider) => {
+                        if (provider !== 'none' && ttsConfig?.[provider]?.status) {
+                            isTTSEnabled = true
+                        }
+                    })
+                }
+                delete parsedConfig.allowedOrigins
+                delete parsedConfig.allowedOriginsError
+                return {
+                    ...parsedConfig,
+                    uploads: uploadsConfig,
+                    flowData: sanitizeFlowDataForPublicEndpoint(dbResponse.flowData),
+                    isTTSEnabled
+                }
             } catch (e) {
                 throw new InternalFlowiseError(StatusCodes.INTERNAL_SERVER_ERROR, `Error parsing Chatbot Config for Chatflow ${chatflowId}`)
             }

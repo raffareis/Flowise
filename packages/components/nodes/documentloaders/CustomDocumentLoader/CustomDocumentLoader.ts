@@ -120,8 +120,7 @@ class CustomDocumentLoader_DocumentLoaders implements INode {
 
         try {
             const response = await executeJavaScriptCode(javascriptFunction, sandbox, {
-                libraries: ['axios'],
-                timeout: 10000
+                libraries: ['axios']
             })
 
             if (output === 'document' && Array.isArray(response)) {

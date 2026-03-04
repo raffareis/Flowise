@@ -62,7 +62,6 @@ class MySQLRecordManager_RecordManager implements INode {
                 label: 'Namespace',
                 name: 'namespace',
                 type: 'string',
-                description: 'If not specified, chatflowid will be used',
                 additionalParams: true,
                 optional: true
             },
@@ -205,8 +204,8 @@ class MySQLRecordManager implements RecordManagerInterface {
     }
 
     async createSchema(): Promise<void> {
+        const dataSource = await this.getDataSource()
         try {
-            const dataSource = await this.getDataSource()
             const queryRunner = dataSource.createQueryRunner()
             const tableName = this.sanitizeTableName(this.tableName)
 
@@ -219,16 +218,42 @@ class MySQLRecordManager implements RecordManagerInterface {
                 unique key \`unique_key_namespace\` (\`key\`,
 \`namespace\`));`)
 
-            const columns = [`updated_at`, `key`, `namespace`, `group_id`]
+            // Add doc_id column if it doesn't exist (migration for existing tables)
+            const checkColumn = await queryRunner.manager.query(
+                `SELECT COUNT(1) ColumnExists FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE table_schema=DATABASE() AND table_name='${tableName}' AND column_name='doc_id';`
+            )
+            if (Number(checkColumn[0].ColumnExists) === 0) {
+                await queryRunner.manager.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`doc_id\` longtext;`)
+            }
+
+            const columns = [`updated_at`, `key`, `namespace`, `group_id`, `doc_id`]
             for (const column of columns) {
                 // MySQL does not support 'IF NOT EXISTS' function for Index
                 const Check = await queryRunner.manager.query(
                     `SELECT COUNT(1) IndexIsThere FROM INFORMATION_SCHEMA.STATISTICS 
                         WHERE table_schema=DATABASE() AND table_name='${tableName}' AND index_name='${column}_index';`
                 )
-                if (Check[0].IndexIsThere === 0)
-                    await queryRunner.manager.query(`CREATE INDEX \`${column}_index\`
+
+                if (Number(Check[0].IndexIsThere) === 0) {
+                    // Check column data type to determine if prefix length is needed
+                    const columnTypeCheck = await queryRunner.manager.query(
+                        `SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS 
+                            WHERE table_schema=DATABASE() AND table_name='${tableName}' AND column_name='${column}';`
+                    )
+
+                    // For TEXT/BLOB columns, use prefix length of 255
+                    if (columnTypeCheck.length > 0) {
+                        const dataType = columnTypeCheck[0].DATA_TYPE.toLowerCase()
+                        if (dataType.includes('text') || dataType.includes('blob')) {
+                            await queryRunner.manager.query(`CREATE INDEX \`${column}_index\`
+        ON \`${tableName}\` (\`${column}\`(255));`)
+                        } else {
+                            await queryRunner.manager.query(`CREATE INDEX \`${column}_index\`
         ON \`${tableName}\` (\`${column}\`);`)
+                        }
+                    }
+                }
             }
 
             await queryRunner.release()
@@ -241,6 +266,8 @@ class MySQLRecordManager implements RecordManagerInterface {
                 return
             }
             throw e
+        } finally {
+            await dataSource.destroy()
         }
     }
 
@@ -259,7 +286,7 @@ class MySQLRecordManager implements RecordManagerInterface {
         }
     }
 
-    async update(keys: string[], updateOptions?: UpdateOptions): Promise<void> {
+    async update(keys: Array<{ uid: string; docId: string }> | string[], updateOptions?: UpdateOptions): Promise<void> {
         if (keys.length === 0) {
             return
         }
@@ -275,23 +302,23 @@ class MySQLRecordManager implements RecordManagerInterface {
             throw new Error(`Time sync issue with database ${updatedAt} < ${timeAtLeast}`)
         }
 
-        const groupIds = _groupIds ?? keys.map(() => null)
+        // Handle both new format (objects with uid and docId) and old format (strings)
+        const isNewFormat = keys.length > 0 && typeof keys[0] === 'object' && 'uid' in keys[0]
+        const keyStrings = isNewFormat ? (keys as Array<{ uid: string; docId: string }>).map((k) => k.uid) : (keys as string[])
+        const docIds = isNewFormat ? (keys as Array<{ uid: string; docId: string }>).map((k) => k.docId) : keys.map(() => null)
 
-        if (groupIds.length !== keys.length) {
-            throw new Error(`Number of keys (${keys.length}) does not match number of group_ids (${groupIds.length})`)
+        const groupIds = _groupIds ?? keyStrings.map(() => null)
+
+        if (groupIds.length !== keyStrings.length) {
+            throw new Error(`Number of keys (${keyStrings.length}) does not match number of group_ids (${groupIds.length})`)
         }
 
-        const recordsToUpsert = keys.map((key, i) => [
-            key,
-            this.namespace,
-            updatedAt,
-            groupIds[i] ?? null // Ensure groupIds[i] is null if undefined
-        ])
+        const recordsToUpsert = keyStrings.map((key, i) => [key, this.namespace, updatedAt, groupIds[i] ?? null, docIds[i] ?? null])
 
         const query = `
-            INSERT INTO \`${tableName}\` (\`key\`, \`namespace\`, \`updated_at\`, \`group_id\`)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE \`updated_at\` = VALUES(\`updated_at\`)`
+            INSERT INTO \`${tableName}\` (\`key\`, \`namespace\`, \`updated_at\`, \`group_id\`, \`doc_id\`)
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE \`updated_at\` = VALUES(\`updated_at\`), \`doc_id\` = VALUES(\`doc_id\`)`
 
         // To handle multiple files upsert
         try {
@@ -347,13 +374,13 @@ class MySQLRecordManager implements RecordManagerInterface {
         }
     }
 
-    async listKeys(options?: ListKeyOptions): Promise<string[]> {
+    async listKeys(options?: ListKeyOptions & { docId?: string }): Promise<string[]> {
         const dataSource = await this.getDataSource()
         const queryRunner = dataSource.createQueryRunner()
         const tableName = this.sanitizeTableName(this.tableName)
 
         try {
-            const { before, after, limit, groupIds } = options ?? {}
+            const { before, after, limit, groupIds, docId } = options ?? {}
             let query = `SELECT \`key\` FROM \`${tableName}\` WHERE \`namespace\` = ?`
             const values: (string | number | string[])[] = [this.namespace]
 
@@ -378,6 +405,11 @@ class MySQLRecordManager implements RecordManagerInterface {
                     .map(() => '?')
                     .join(', ')})`
                 values.push(...groupIds.filter((gid): gid is string => gid !== null))
+            }
+
+            if (docId) {
+                query += ` AND \`doc_id\` = ?`
+                values.push(docId)
             }
 
             query += ';'

@@ -14,8 +14,14 @@ export const runAdditionalEvaluators = async (
     metricsArray: ICommonObject[],
     actualOutputArray: string[],
     errorArray: string[],
-    selectedEvaluators: string[]
+    selectedEvaluators: string[],
+    workspaceId: string
 ) => {
+    // Validate that inputs are arrays
+    if (!Array.isArray(actualOutputArray) || !Array.isArray(selectedEvaluators)) {
+        throw new Error('Invalid input: expected arrays')
+    }
+
     const evaluationResults: any[] = []
     const evaluatorDict: any = {}
 
@@ -27,7 +33,7 @@ export const runAdditionalEvaluators = async (
             const evaluatorId = selectedEvaluators[i]
             let evaluator = evaluatorDict[evaluatorId]
             if (!evaluator) {
-                evaluator = await evaluatorsService.getEvaluator(evaluatorId)
+                evaluator = await evaluatorsService.getEvaluator(evaluatorId, workspaceId)
                 evaluatorDict[evaluatorId] = evaluator
             }
 

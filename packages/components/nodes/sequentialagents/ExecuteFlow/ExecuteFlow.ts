@@ -199,7 +199,7 @@ class ExecuteFlow_SeqAgents implements INode {
             if (seqExecuteFlowInput === 'userQuestion') {
                 flowInput = input
             } else if (seqExecuteFlowInput && seqExecuteFlowInput.startsWith('{{') && seqExecuteFlowInput.endsWith('}}')) {
-                const nodeId = seqExecuteFlowInput.replace('{{', '').replace('}}', '').replace('$', '').trim()
+                const nodeId = seqExecuteFlowInput.replace('{{', '').replace('}}', '').replace(/\$/g, '').trim()
                 const messageOutputs = ((state.messages as unknown as BaseMessage[]) ?? []).filter(
                     (message) => message.additional_kwargs && message.additional_kwargs?.nodeId === nodeId
                 )
@@ -264,8 +264,7 @@ class ExecuteFlow_SeqAgents implements INode {
 
             try {
                 let response = await executeJavaScriptCode(code, sandbox, {
-                    useSandbox: false,
-                    timeout: 10000
+                    useSandbox: false
                 })
 
                 if (typeof response === 'object') {

@@ -1,4 +1,5 @@
 import { Logger } from 'winston'
+import { URL } from 'url'
 import { v4 as uuidv4 } from 'uuid'
 import { Client } from 'langsmith'
 import CallbackHandler from 'langfuse-langchain'
@@ -91,14 +92,27 @@ interface PhoenixTracerOptions {
     enableCallback?: boolean
 }
 
-function getPhoenixTracer(options: PhoenixTracerOptions): Tracer | undefined {
+export function getPhoenixTracer(options: PhoenixTracerOptions): Tracer | undefined {
     const SEMRESATTRS_PROJECT_NAME = 'openinference.project.name'
     try {
+        const parsedURL = new URL(options.baseUrl)
+        const baseEndpoint = `${parsedURL.protocol}//${parsedURL.host}`
+
+        // Remove trailing slashes
+        let path = parsedURL.pathname.replace(/\/$/, '')
+
+        // Remove any existing /v1/traces suffix
+        path = path.replace(/\/v1\/traces$/, '')
+
+        const exporterUrl = `${baseEndpoint}${path}/v1/traces`
+        const exporterHeaders = {
+            api_key: options.apiKey || '',
+            authorization: `Bearer ${options.apiKey || ''}`
+        }
+
         const traceExporter = new ProtoOTLPTraceExporter({
-            url: `${options.baseUrl}/v1/traces`,
-            headers: {
-                api_key: options.apiKey
-            }
+            url: exporterUrl,
+            headers: exporterHeaders
         })
         const tracerProvider = new NodeTracerProvider({
             resource: new Resource({
@@ -591,6 +605,15 @@ export const additionalCallbacks = async (nodeData: INodeData, options: ICommonO
                     })
 
                     const trace = langwatch.getTrace()
+
+                    if (nodeData?.inputs?.analytics?.langWatch) {
+                        trace.update({
+                            metadata: {
+                                ...nodeData?.inputs?.analytics?.langWatch
+                            }
+                        })
+                    }
+
                     callbacks.push(trace.getLangChainCallback())
                 } else if (provider === 'arize') {
                     const arizeApiKey = getCredentialParam('arizeApiKey', credentialData, nodeData)
@@ -710,6 +733,40 @@ export class AnalyticHandler {
             if (now - instance.createdAt > maxAge) {
                 AnalyticHandler.resetInstance(chatId)
             }
+        }
+    }
+
+    /**
+     * Helper method to end an OpenTelemetry span with output, token usage, and model name attributes.
+     * Used by arize, phoenix, and opik providers.
+     */
+    private _endOtelSpan(
+        providerName: string,
+        returnIds: ICommonObject,
+        outputText: string,
+        usageMetadata?: { input_tokens?: number; output_tokens?: number; total_tokens?: number },
+        modelName?: string
+    ): void {
+        const llmSpan: Span | undefined = this.handlers[providerName]?.llmSpan?.[returnIds[providerName]?.llmSpan]
+        if (llmSpan) {
+            llmSpan.setAttribute('output.value', JSON.stringify(outputText))
+            llmSpan.setAttribute('output.mime_type', 'application/json')
+            if (usageMetadata) {
+                if (usageMetadata.input_tokens !== undefined) {
+                    llmSpan.setAttribute('llm.token_count.prompt', usageMetadata.input_tokens)
+                }
+                if (usageMetadata.output_tokens !== undefined) {
+                    llmSpan.setAttribute('llm.token_count.completion', usageMetadata.output_tokens)
+                }
+                if (usageMetadata.total_tokens !== undefined) {
+                    llmSpan.setAttribute('llm.token_count.total', usageMetadata.total_tokens)
+                }
+            }
+            if (modelName) {
+                llmSpan.setAttribute('llm.model_name', modelName)
+            }
+            llmSpan.setStatus({ code: SpanStatusCode.OK })
+            llmSpan.end()
         }
     }
 
@@ -1377,25 +1434,104 @@ export class AnalyticHandler {
         return returnIds
     }
 
-    async onLLMEnd(returnIds: ICommonObject, output: string) {
+    async onLLMEnd(
+        returnIds: ICommonObject,
+        output: string | ICommonObject,
+        { model, provider }: { model?: string; provider?: string } = {}
+    ) {
+        // Extract content, usage metadata, and model name from output
+        // Support both string (backward compatible) and structured object formats
+        let outputText: string
+        let usageMetadata: ICommonObject | undefined
+        let modelName = model
+
+        if (typeof output === 'string') {
+            outputText = output
+        } else {
+            // Extract text content
+            outputText = output.content ?? ''
+
+            // Extract usage metadata (supports both LangChain and OpenAI field names)
+            usageMetadata = output.usageMetadata ?? output.usage_metadata
+            if (usageMetadata) {
+                // Normalize field names for consistent access
+                usageMetadata = {
+                    input_tokens: usageMetadata.input_tokens ?? usageMetadata.prompt_tokens,
+                    output_tokens: usageMetadata.output_tokens ?? usageMetadata.completion_tokens,
+                    total_tokens: usageMetadata.total_tokens
+                }
+            }
+
+            // Extract model name from response metadata
+            const responseMetadata = output.responseMetadata ?? output.response_metadata
+            if (!model && responseMetadata) {
+                modelName = responseMetadata.model ?? responseMetadata.model_name ?? responseMetadata.modelId
+            }
+        }
+
         if (Object.prototype.hasOwnProperty.call(this.handlers, 'langSmith')) {
             const llmRun: RunTree | undefined = this.handlers['langSmith'].llmRun[returnIds['langSmith'].llmRun]
             if (llmRun) {
-                await llmRun.end({
-                    outputs: {
-                        generations: [output]
+                const outputs: ICommonObject = {
+                    generations: [outputText]
+                }
+                // Add usage_metadata and model info to run's extra.metadata for cost tracking
+                // LangSmith requires: usage_metadata (with input_tokens, output_tokens, total_tokens)
+                // and ls_model_name + ls_provider in metadata for automatic cost calculation
+                if (usageMetadata || modelName) {
+                    if (!llmRun.extra) {
+                        llmRun.extra = {}
                     }
+                    if (!llmRun.extra.metadata) {
+                        llmRun.extra.metadata = {}
+                    }
+                    if (usageMetadata) {
+                        llmRun.extra.metadata.usage_metadata = {
+                            input_tokens: usageMetadata.input_tokens,
+                            output_tokens: usageMetadata.output_tokens,
+                            total_tokens: usageMetadata.total_tokens
+                        }
+                    }
+                    if (modelName) {
+                        llmRun.extra.metadata.ls_model_name = modelName
+                    }
+                    if (provider) {
+                        let normalized = provider.toLowerCase()
+                        if (normalized.startsWith('chat')) normalized = normalized.slice(4)
+                        if (normalized.endsWith('chat')) normalized = normalized.slice(0, -4)
+                        if (normalized.includes('bedrock')) normalized = 'amazon_bedrock'
+                        llmRun.extra.metadata.ls_provider = normalized
+                    }
+                }
+                await llmRun.end({
+                    outputs
                 })
                 await llmRun.patchRun()
             }
         }
 
         if (Object.prototype.hasOwnProperty.call(this.handlers, 'langFuse')) {
-            const generation: LangfuseGenerationClient | undefined = this.handlers['langFuse'].generation[returnIds['langFuse'].generation]
+            const generation: LangfuseGenerationClient | undefined = this.handlers['langFuse'].generation[returnIds['langFuse']?.generation]
             if (generation) {
-                generation.end({
-                    output: output
-                })
+                const endPayload: ICommonObject = {
+                    output: outputText
+                }
+                // Add model name if available
+                if (modelName) {
+                    endPayload.model = modelName
+                }
+                // Add usage data if available (using Langfuse's OpenAIUsage format)
+                if (usageMetadata) {
+                    endPayload.usage = {
+                        promptTokens: usageMetadata.input_tokens,
+                        completionTokens: usageMetadata.output_tokens,
+                        totalTokens: usageMetadata.total_tokens
+                    }
+                }
+                generation.end(endPayload)
+                // Flush to ensure the generation update is sent before the request completes
+                const langfuse: Langfuse = this.handlers['langFuse'].client
+                await langfuse.flushAsync()
             }
         }
 
@@ -1404,50 +1540,54 @@ export class AnalyticHandler {
             const monitor = this.handlers['lunary'].client
 
             if (monitor && llmEventId) {
-                await monitor.trackEvent('llm', 'end', {
+                const eventData: ICommonObject = {
                     runId: llmEventId,
-                    output
-                })
+                    output: outputText
+                }
+                // Add token usage if available
+                if (usageMetadata) {
+                    eventData.tokensUsage = {
+                        prompt: usageMetadata.input_tokens,
+                        completion: usageMetadata.output_tokens
+                    }
+                }
+                if (modelName) {
+                    eventData.model = modelName
+                }
+                await monitor.trackEvent('llm', 'end', eventData)
             }
         }
 
         if (Object.prototype.hasOwnProperty.call(this.handlers, 'langWatch')) {
             const span: LangWatchSpan | undefined = this.handlers['langWatch'].span[returnIds['langWatch'].span]
             if (span) {
-                span.end({
-                    output: autoconvertTypedValues(output)
-                })
+                const endPayload: ICommonObject = {
+                    output: autoconvertTypedValues(outputText)
+                }
+                // Add metrics if usage available
+                if (usageMetadata) {
+                    endPayload.metrics = {
+                        promptTokens: usageMetadata.input_tokens,
+                        completionTokens: usageMetadata.output_tokens
+                    }
+                }
+                if (modelName) {
+                    endPayload.model = modelName
+                }
+                span.end(endPayload)
             }
         }
 
         if (Object.prototype.hasOwnProperty.call(this.handlers, 'arize')) {
-            const llmSpan: Span | undefined = this.handlers['arize'].llmSpan[returnIds['arize'].llmSpan]
-            if (llmSpan) {
-                llmSpan.setAttribute('output.value', JSON.stringify(output))
-                llmSpan.setAttribute('output.mime_type', 'application/json')
-                llmSpan.setStatus({ code: SpanStatusCode.OK })
-                llmSpan.end()
-            }
+            this._endOtelSpan('arize', returnIds, outputText, usageMetadata, modelName)
         }
 
         if (Object.prototype.hasOwnProperty.call(this.handlers, 'phoenix')) {
-            const llmSpan: Span | undefined = this.handlers['phoenix'].llmSpan[returnIds['phoenix'].llmSpan]
-            if (llmSpan) {
-                llmSpan.setAttribute('output.value', JSON.stringify(output))
-                llmSpan.setAttribute('output.mime_type', 'application/json')
-                llmSpan.setStatus({ code: SpanStatusCode.OK })
-                llmSpan.end()
-            }
+            this._endOtelSpan('phoenix', returnIds, outputText, usageMetadata, modelName)
         }
 
         if (Object.prototype.hasOwnProperty.call(this.handlers, 'opik')) {
-            const llmSpan: Span | undefined = this.handlers['opik'].llmSpan[returnIds['opik'].llmSpan]
-            if (llmSpan) {
-                llmSpan.setAttribute('output.value', JSON.stringify(output))
-                llmSpan.setAttribute('output.mime_type', 'application/json')
-                llmSpan.setStatus({ code: SpanStatusCode.OK })
-                llmSpan.end()
-            }
+            this._endOtelSpan('opik', returnIds, outputText, usageMetadata, modelName)
         }
     }
 
@@ -1751,7 +1891,7 @@ export class AnalyticHandler {
         }
 
         if (Object.prototype.hasOwnProperty.call(this.handlers, 'lunary')) {
-            const toolEventId: string = this.handlers['lunary'].llmEvent[returnIds['lunary'].toolEvent]
+            const toolEventId: string = this.handlers['lunary'].toolEvent[returnIds['lunary'].toolEvent]
             const monitor = this.handlers['lunary'].client
 
             if (monitor && toolEventId) {
