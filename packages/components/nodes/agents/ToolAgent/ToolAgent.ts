@@ -363,7 +363,16 @@ const prepareAgent = async (
                 return messages ?? []
             },
             ['human_message']: async (i: { input: string; steps: ToolsAgentStep[] }) => {
-                return new HumanMessage({ content: i.input, name: memory.humanPrefix })
+                // CACHE-FIX (elysium#477): se o chatflow definir o promptValue
+                // `contexto_atual`, o bloco dinamico (data/hora, calendario,
+                // extraPrompt) entra no TURNO ATUAL em vez do system prompt.
+                // Motivo: dado volatil no system invalida o prefixo do prompt
+                // caching (system + historico inteiros). A memoria continua
+                // gravando o input cru, entao o historico nao e poluido.
+                const ctxFn = (promptVariables as Record<string, any>)['contexto_atual']
+                const ctx = typeof ctxFn === 'function' ? String(ctxFn() ?? '').trim() : ''
+                const content = ctx ? `${ctx}\n\n=== MENSAGEM DO CLIENTE ===\n${i.input}` : i.input
+                return new HumanMessage({ content, name: memory.humanPrefix })
             },
             ...promptVariables
         },
