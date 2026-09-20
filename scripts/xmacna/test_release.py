@@ -1,6 +1,7 @@
 import argparse
 import io
 import hashlib
+import stat
 import json
 import tempfile
 import unittest
@@ -170,6 +171,8 @@ class ReleaseTest(unittest.TestCase):
         names = [call[1] for call in self.calls]
         self.assertLess(names.index('put-object'), names.index('update-environment'))
         self.assertEqual(0o600, Path(self.args.evidence).stat().st_mode & 0o777)
+        final = json.loads(next(data for key, data in self.persisted.items() if key.endswith('.result.json')))
+        self.assertEqual(200, final['verified']['http'])
 
     def test_rollback_allows_unhealthy_current_without_canary(self):
         self.args.operation = 'rollback'
@@ -185,6 +188,28 @@ class ReleaseTest(unittest.TestCase):
 
     def test_extra_configuration_even_with_reviewed_hash_rejected(self):
         self.bundles['candidate'] = bundle(release.REPOSITORY + '@' + D2, ('.ebextensions/99-env.config',))
+        self.args.bundle_sha256 = hashlib.sha256(self.bundles['candidate']).hexdigest()
+        self.reject()
+
+    def test_directory_permissions_are_part_of_configuration(self):
+        for version, mode in [('previous', 0o700), ('candidate', 0o755)]:
+            stream = io.BytesIO(self.bundles[version])
+            with zipfile.ZipFile(stream, 'a') as archive:
+                directory = zipfile.ZipInfo('.ebextensions/')
+                directory.external_attr = (stat.S_IFDIR | mode) << 16
+                archive.writestr(directory, b'')
+            self.bundles[version] = stream.getvalue()
+        self.args.bundle_sha256 = hashlib.sha256(self.bundles['candidate']).hexdigest()
+        self.args.current_bundle_sha256 = hashlib.sha256(self.bundles['previous']).hexdigest()
+        self.reject()
+
+    def test_unsupported_symlink_entry_rejected(self):
+        stream = io.BytesIO(self.bundles['candidate'])
+        with zipfile.ZipFile(stream, 'a') as archive:
+            link = zipfile.ZipInfo('config')
+            link.external_attr = (stat.S_IFLNK | 0o777) << 16
+            archive.writestr(link, b'/etc/passwd')
+        self.bundles['candidate'] = stream.getvalue()
         self.args.bundle_sha256 = hashlib.sha256(self.bundles['candidate']).hexdigest()
         self.reject()
 

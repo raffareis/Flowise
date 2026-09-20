@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import subprocess
+import stat
 import tempfile
 import urllib.request
 import zipfile
@@ -61,8 +62,14 @@ def immutable_image(bundle, digest):
     normalized = {}
     with zipfile.ZipFile(bundle) as archive:
         for info in archive.infolist():
-            if info.is_dir():
-                continue
+            name = info.filename
+            mode = info.external_attr >> 16
+            kind = stat.S_IFMT(mode)
+            if (name.startswith('/') or '\\' in name or '..' in Path(name).parts
+                    or kind not in (0, stat.S_IFREG, stat.S_IFDIR)
+                    or (kind == stat.S_IFDIR and not info.is_dir())
+                    or (info.is_dir() and kind == stat.S_IFREG)):
+                raise ValueError('Unsupported or unsafe bundle entry')
             data = archive.read(info)
             if info.filename == 'Dockerrun.aws.json':
                 document['Image']['Name'] = '<reviewed-image-digest>'
@@ -152,6 +159,9 @@ def execute(args):
                 raise ValueError('Public health did not return HTTP 200')
         plan['verified'] = {'version': final['VersionLabel'], 'health': final['Health'], 'http': 200}
         evidence.write_text(json.dumps(plan, indent=2) + '\n')
+        aws('s3api', 'put-object', '--bucket', destination['bucket'],
+            '--key', destination['key'].removesuffix('.json') + '.result.json',
+            '--body', str(evidence), '--server-side-encryption', 'AES256', '--if-none-match', '*')
         return plan
 
 

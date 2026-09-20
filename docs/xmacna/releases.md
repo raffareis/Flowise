@@ -30,7 +30,9 @@ aguarda Ready/Green e HTTP 200. Não altera env vars, não executa restart e nã
 O canário deve usar dados isolados e ter suas migrations/predictions/integradores verificados antes
 da promoção. Ready/Green só é um gate técnico adicional; não é prova completa de comportamento.
 O registro é persistido e relido no bucket privado EB, com SSE-S3 e chave única, antes da escrita
-em produção; contém a versão/digest/bundle anterior. Falha dessa persistência bloqueia a promoção. Falha não provoca
+em produção; contém a versão/digest/bundle anterior. Falha dessa persistência bloqueia a promoção.
+Ao concluir os checks, um segundo objeto imutável `.result.json` registra o resultado; o preflight
+original permanece intacto mesmo quando a execução posterior falha. Falha não provoca
 rollback automático: analisar migrations antes de retornar a uma versão anterior. Para rollback
 explícito, usar `operation=rollback`, com alvo/anterior trocados e estado corrente conferido;
 permite health degradado, mas exige ambiente Ready e os dois bundles imutáveis. Mantém todas as
