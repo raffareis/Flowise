@@ -4,7 +4,7 @@
 # Run image
 # docker run -d -p 3000:3000 flowise
 
-FROM node:20-alpine
+FROM node:20.19.5-alpine
 
 # Install system dependencies and build tools
 RUN apk update && \
@@ -18,12 +18,12 @@ RUN apk update && \
         pango-dev \
         chromium \
         curl && \
-    npm install -g pnpm
+    npm install -g pnpm@10.26.0
 
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
-ENV NODE_OPTIONS=--max-old-space-size=8192
+ENV NODE_OPTIONS=--max-old-space-size=4096
 
 WORKDIR /usr/src/flowise
 
@@ -31,7 +31,7 @@ WORKDIR /usr/src/flowise
 COPY . .
 
 # Install dependencies and build
-RUN pnpm install && \
+RUN pnpm install --frozen-lockfile && \
     pnpm build
 
 # Give the node user ownership of the application files
