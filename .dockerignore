@@ -8,3 +8,15 @@ build
 
 packages/server/.env
 packages/ui/.env
+
+.git
+.github
+.codex
+.turbo
+**/.turbo
+**/coverage
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example

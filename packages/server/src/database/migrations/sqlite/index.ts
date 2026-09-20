@@ -24,6 +24,7 @@ import { AddAgentReasoningToChatMessage1714679514451 } from './1714679514451-Add
 import { AddEvaluator1714808591644 } from './1714808591644-AddEvaluator'
 import { AddVectorStoreConfigToDocStore1715861032479 } from './1715861032479-AddVectorStoreConfigToDocStore'
 import { AddTypeToChatFlow1716300000000 } from './1716300000000-AddTypeToChatFlow'
+import { AddNameToChatHistory1711637331047 } from './1711637331048-AddNameToChatHistory'
 import { AddApiKey1720230151480 } from './1720230151480-AddApiKey'
 import { AddActionToChatMessage1721078251523 } from './1721078251523-AddActionToChatMessage'
 import { AddCustomTemplate1725629836652 } from './1725629836652-AddCustomTemplate'

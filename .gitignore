@@ -114,3 +114,7 @@ extensions/
 # Only allow apps/oss-app, ignore all other apps
 apps/*/
 !apps/oss-app/
+
+# Release helper Python cache
+__pycache__/
+*.pyc

@@ -631,6 +631,7 @@ export const executeFlow = async ({
             const userMessage: Omit<IChatMessage, 'id'> = {
                 role: 'userMessage',
                 content: incomingInput.question,
+                name: memoryNode?.data?.inputs?.humanPrefix,
                 chatflowid: agentflow.id,
                 chatType: isEvaluation ? ChatType.EVALUATION : isInternal ? ChatType.INTERNAL : ChatType.EXTERNAL,
                 chatId,
@@ -646,6 +647,7 @@ export const executeFlow = async ({
                 id: apiMessageId,
                 role: 'apiMessage',
                 content: finalResult,
+                name: memoryNode?.data?.inputs?.aiPrefix,
                 chatflowid: agentflow.id,
                 chatType: isEvaluation ? ChatType.EVALUATION : isInternal ? ChatType.INTERNAL : ChatType.EXTERNAL,
                 chatId,
@@ -796,6 +798,7 @@ export const executeFlow = async ({
         const userMessage: Omit<IChatMessage, 'id'> = {
             role: 'userMessage',
             content: question,
+            name: incomingInput.overrideConfig?.humanPrefix ?? memoryNode?.data?.inputs?.humanPrefix,
             chatflowid,
             chatType: isEvaluation ? ChatType.EVALUATION : isInternal ? ChatType.INTERNAL : ChatType.EXTERNAL,
             chatId,
@@ -861,6 +864,7 @@ export const executeFlow = async ({
             id: apiMessageId,
             role: 'apiMessage',
             content: resultText,
+            name: incomingInput.overrideConfig?.aiPrefix ?? memoryNode?.data?.inputs?.aiPrefix,
             chatflowid,
             chatType: isEvaluation ? ChatType.EVALUATION : isInternal ? ChatType.INTERNAL : ChatType.EXTERNAL,
             chatId,

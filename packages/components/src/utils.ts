@@ -704,9 +704,9 @@ export const mapChatMessageToBaseMessage = async (chatmessages: any[] = [], orgI
 
     for (const message of chatmessages) {
         if (message.role === 'apiMessage' || message.type === 'apiMessage') {
-            chatHistory.push(new AIMessage(message.content || ''))
+            chatHistory.push(new AIMessage({ content: message.content || '', name: message.name }))
         } else if (message.role === 'userMessage' || message.type === 'userMessage') {
-            // check for image/files uploads
+            // check for image uploads
             if (message.fileUploads) {
                 // example: [{"type":"stored-file","name":"0_DiXc4ZklSTo3M8J4.jpg","mime":"image/jpeg"}]
                 try {
@@ -767,7 +767,7 @@ export const mapChatMessageToBaseMessage = async (chatmessages: any[] = [], orgI
                     )
                 } catch (e) {
                     // failed to parse fileUploads, continue with text only
-                    chatHistory.push(new HumanMessage(message.content || ''))
+                    chatHistory.push(new HumanMessage({ content: message.content || '', name: message.name }))
                 }
             } else {
                 chatHistory.push(new HumanMessage(message.content || ''))
@@ -891,17 +891,20 @@ export const convertBaseMessagetoIMessage = (messages: BaseMessage[]): IMessage[
         if (m._getType() === 'human') {
             formatmessages.push({
                 message: m.content as string,
-                type: 'userMessage'
+                type: 'userMessage',
+                name: m.name
             })
         } else if (m._getType() === 'ai') {
             formatmessages.push({
                 message: m.content as string,
-                type: 'apiMessage'
+                type: 'apiMessage',
+                name: m.name
             })
         } else if (m._getType() === 'system') {
             formatmessages.push({
                 message: m.content as string,
-                type: 'apiMessage'
+                type: 'apiMessage',
+                name: m.name
             })
         }
     }

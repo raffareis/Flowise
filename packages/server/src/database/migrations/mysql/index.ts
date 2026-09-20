@@ -17,6 +17,7 @@ import { AddFeedback1707213626553 } from './1707213626553-AddFeedback'
 import { AddUpsertHistoryEntity1709814301358 } from './1709814301358-AddUpsertHistoryEntity'
 import { AddLead1710832127079 } from './1710832127079-AddLead'
 import { AddLeadToChatMessage1711538023578 } from './1711538023578-AddLeadToChatMessage'
+import { AddNameToChatHistory1711637331047 } from './1711637331048-AddNameToChatHistory'
 import { AddDocumentStore1711637331047 } from './1711637331047-AddDocumentStore'
 import { AddEvaluation1714548873039 } from './1714548873039-AddEvaluation'
 import { AddDatasets1714548903384 } from './1714548903384-AddDataset'
@@ -80,6 +81,7 @@ export const mysqlMigrations = [
     AddDocumentStore1711637331047,
     AddLead1710832127079,
     AddLeadToChatMessage1711538023578,
+    AddNameToChatHistory1711637331047,
     AddAgentReasoningToChatMessage1714679514451,
     AddVectorStoreConfigToDocStore1715861032479,
     AddTypeToChatFlow1716300000000,

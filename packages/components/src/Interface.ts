@@ -172,6 +172,7 @@ export interface INodeCredential {
 export interface IMessage {
     message: string
     type: MessageType
+    name?: string
     role?: MessageType
     content?: string
 }
@@ -353,7 +354,7 @@ export interface MemoryMethods {
         returnBaseMessages?: boolean,
         prependMessages?: IMessage[]
     ): Promise<IMessage[] | BaseMessage[]>
-    addChatMessages(msgArray: { text: string; type: MessageType }[], overrideSessionId?: string): Promise<void>
+    addChatMessages(msgArray: { text: string; type: MessageType; name?: string }[], overrideSessionId?: string): Promise<void>
     clearChatMessages(overrideSessionId?: string): Promise<void>
 }
 
@@ -363,7 +364,7 @@ export abstract class FlowiseMemory extends BufferMemory implements MemoryMethod
         returnBaseMessages?: boolean,
         prependMessages?: IMessage[]
     ): Promise<IMessage[] | BaseMessage[]>
-    abstract addChatMessages(msgArray: { text: string; type: MessageType }[], overrideSessionId?: string): Promise<void>
+    abstract addChatMessages(msgArray: { text: string; type: MessageType; name?: string }[], overrideSessionId?: string): Promise<void>
     abstract clearChatMessages(overrideSessionId?: string): Promise<void>
 }
 
@@ -373,7 +374,7 @@ export abstract class FlowiseWindowMemory extends BufferWindowMemory implements 
         returnBaseMessages?: boolean,
         prependMessages?: IMessage[]
     ): Promise<IMessage[] | BaseMessage[]>
-    abstract addChatMessages(msgArray: { text: string; type: MessageType }[], overrideSessionId?: string): Promise<void>
+    abstract addChatMessages(msgArray: { text: string; type: MessageType; name?: string }[], overrideSessionId?: string): Promise<void>
     abstract clearChatMessages(overrideSessionId?: string): Promise<void>
 }
 
@@ -383,7 +384,7 @@ export abstract class FlowiseSummaryMemory extends ConversationSummaryMemory imp
         returnBaseMessages?: boolean,
         prependMessages?: IMessage[]
     ): Promise<IMessage[] | BaseMessage[]>
-    abstract addChatMessages(msgArray: { text: string; type: MessageType }[], overrideSessionId?: string): Promise<void>
+    abstract addChatMessages(msgArray: { text: string; type: MessageType; name?: string }[], overrideSessionId?: string): Promise<void>
     abstract clearChatMessages(overrideSessionId?: string): Promise<void>
 }
 
@@ -393,7 +394,7 @@ export abstract class FlowiseSummaryBufferMemory extends ConversationSummaryBuff
         returnBaseMessages?: boolean,
         prependMessages?: IMessage[]
     ): Promise<IMessage[] | BaseMessage[]>
-    abstract addChatMessages(msgArray: { text: string; type: MessageType }[], overrideSessionId?: string): Promise<void>
+    abstract addChatMessages(msgArray: { text: string; type: MessageType; name?: string }[], overrideSessionId?: string): Promise<void>
     abstract clearChatMessages(overrideSessionId?: string): Promise<void>
 }
 

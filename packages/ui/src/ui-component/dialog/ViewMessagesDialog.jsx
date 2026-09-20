@@ -503,7 +503,8 @@ const ViewMessagesDialog = ({ show, dialogProps, onCancel }) => {
             const obj = {
                 ...chatmsg,
                 message: chatmsg.content,
-                type: chatmsg.role
+                type: chatmsg.role,
+                name: chatmsg.name
             }
             if (chatmsg.sourceDocuments) obj.sourceDocuments = chatmsg.sourceDocuments
             if (chatmsg.usedTools) obj.usedTools = chatmsg.usedTools

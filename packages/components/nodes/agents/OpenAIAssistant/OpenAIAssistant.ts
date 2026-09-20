@@ -368,7 +368,9 @@ class OpenAIAssistant_Agents implements INode {
                     assistant_id: retrievedAssistant.id,
                     stream: true,
                     tool_choice: toolChoice,
-                    parallel_tool_calls: parallelToolCalls
+                    parallel_tool_calls: parallelToolCalls,
+                    additional_instructions: nodeData?.inputs?.vars?.extraPrompt,
+                    instructions: nodeData?.inputs?.vars?.customPrompt
                 })
 
                 for await (const event of streamThread) {
@@ -770,7 +772,9 @@ class OpenAIAssistant_Agents implements INode {
             const runThread = await openai.beta.threads.runs.create(threadId, {
                 assistant_id: retrievedAssistant.id,
                 tool_choice: toolChoice,
-                parallel_tool_calls: parallelToolCalls
+                parallel_tool_calls: parallelToolCalls,
+                additional_instructions: nodeData?.inputs?.vars?.extraPrompt,
+                instructions: nodeData?.inputs?.vars?.customPrompt
             })
             runThreadId = runThread.id
             let state = await promise(threadId, runThread.id)
@@ -785,7 +789,9 @@ class OpenAIAssistant_Agents implements INode {
                     const newRunThread = await openai.beta.threads.runs.create(threadId, {
                         assistant_id: retrievedAssistant.id,
                         tool_choice: toolChoice,
-                        parallel_tool_calls: parallelToolCalls
+                        parallel_tool_calls: parallelToolCalls,
+                        additional_instructions: nodeData?.inputs?.vars?.extraPrompt,
+                        instructions: nodeData?.inputs?.vars?.customPrompt
                     })
                     runThreadId = newRunThread.id
                     state = await promise(threadId, newRunThread.id)
